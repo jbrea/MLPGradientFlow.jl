@@ -13,7 +13,7 @@ Activation functions can be e.g. `MLPGradientFlow.relu`, `MLPGradientFlow.sigmoi
 
 ### From Julia
 ```julia
-using Pkg; Pkg.add(url = "git@github.com:jbrea/MLPGradientFlow.jl.git")
+using Pkg; Pkg.add(url = "https://github.com/jbrea/MLPGradientFlow.jl.git")
 ```
 
 ### From Python
@@ -21,7 +21,7 @@ using Pkg; Pkg.add(url = "git@github.com:jbrea/MLPGradientFlow.jl.git")
 Install `juliacall`, e.g. `pip install juliacall`.
 ```python
 from juliacall import Main as jl
-jl.seval('using Pkg; Pkg.add(url = "git@github.com:jbrea/MLPGradientFlow.jl.git")')
+jl.seval('using Pkg; Pkg.add(url = "https://github.com/jbrea/MLPGradientFlow.jl.git")')
 ```
 
 ## Usage
