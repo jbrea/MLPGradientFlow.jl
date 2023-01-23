@@ -1,0 +1,46 @@
+name = "MLPGradientFlow"
+uuid = "5710a1e5-60a8-4c70-afc1-f14619eff7f5"
+authors = ["Johanni Brea <jbrea@users.noreply.github.com>"]
+version = "0.2.0"
+
+[deps]
+ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
+ComponentArrays = "b0b7db55-cfe3-40fc-9ded-d10e2dbeff66"
+Cuba = "8a292aeb-7a57-582c-b821-06e4c11590b1"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+HCubature = "19dc6840-f33b-545b-b366-655c7e3ffd49"
+IfElse = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
+LazyArtifacts = "4af54fe1-eca0-43a8-85a7-787d91b784e3"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LoopVectorization = "bdcacae8-1622-11e9-2a5c-532679323890"
+NLopt = "76087f3c-5699-56af-9a33-bf431cd00edd"
+Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
+OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
+Pickle = "fbb45041-c46e-462f-888f-7c521cafbc2c"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SLEEFPirates = "476501e8-09a2-5ece-8869-fb82de89a1fa"
+Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
+StrideArraysCore = "7792a7ef-975c-4747-a70f-980b88e8d1da"
+
+[compat]
+ArrayInterface = "6"
+ComponentArrays = "0.12,0.13"
+IfElse = "0.1"
+LoopVectorization = "0.12"
+Optim = "1.7"
+OrdinaryDiffEq = "6.18"
+Pickle = "0.3"
+Static = "0.7"
+StrideArraysCore = "0.3,0.4"
+julia = "1.7"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
