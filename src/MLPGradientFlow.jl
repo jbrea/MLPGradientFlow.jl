@@ -919,6 +919,7 @@ needs_hessian(::Descent) = false
 needs_hessian(::Adam) = false
 needs_hessian(::BFGS) = false
 needs_hessian(::LBFGS) = false
+needs_hessian(::RK4) = false
 needs_hessian(::Symbol) = false # NLopt
 function needs_hessian(it1, alg1, it2, alg2)
     (it1 > 0 && needs_hessian(alg1)) || (it2 > 0 && needs_hessian(alg2))
@@ -957,6 +958,17 @@ end
 function alg_default(x)
     length(x) ≤ 1024 && return KenCarp58()
     return RK4()
+end
+function default_hessian_template(p, maxiterations_ode, alg,
+                                  maxiterations_optim, optim_solver)
+    if needs_hessian(maxiterations_ode, alg, maxiterations_optim, optim_solver)
+        if length(p) > 10^4 && verbosity > 0
+            @warn "Computing Hessians for $(length(p)) parameters requires a lot of memory and time"
+        end
+        Hessian(p)
+    else
+        nothing
+    end
 end
 function get_functions(net, maxnorm;
                        hessian_template = nothing,
@@ -1072,16 +1084,9 @@ function train(net::Net, p;
                optim_solver = optim_solver_default(p),
                maxiterations_ode = 10^6,
                maxiterations_optim = 10^5,
+               hessian_template = default_hessian_template(p, maxiterations_ode, alg, maxiterations_optim, optim_solver),
                kwargs...)
     checkparams(net, p)
-    if needs_hessian(maxiterations_ode, alg, maxiterations_optim, optim_solver)
-        if length(p) > 10^4 && verbosity > 0
-            @warn "Computing Hessians for $(length(p)) parameters requires a lot of memory and time"
-        end
-        hessian_template = Hessian(p)
-    else
-        hessian_template = nothing
-    end
     dx = gradient(net, p, scale = loss_scale)
     gnorminf = maximum(abs, dx)
     if gnorminf > 5e2
@@ -1159,7 +1164,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
             sol = nothing
         else
             odef = ODEFunction(swapsign(g!), jac = swapsign(h!))
-            prob = ODEProblem(odef, x, (0., Float64(maxT)), (; net,))
+            prob = ODEProblem(odef, Array(x), (0., Float64(maxT)), (; net,))
             termin = terminator(; maxtime = maxtime_ode,
                                   maxiter = maxiterations_ode,
                                   minloss = minloss,
@@ -1173,16 +1178,18 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
             ode_loss = lossfunc(sol.u[end])
             ode_iterations = termin.condition.i[]
             if save_everystep
-                trajectory = [(t, sol(t))
-                              for t in 10.0.^range(log10(sol.t[1]+1), log10(sol.t[end]+1), n_samples_trajectory) .- 1]
+                trajectory = [(t, copy(x .= sol(t)))
+                              for t in 10.0.^range(log10(sol.t[1]+1), log10(sol.t[end]+1-eps()), n_samples_trajectory) .- 1]
             end
-            x = sol[end]
+            x .= sol[end]
+            ode_x = copy(x)
         end
     else
         ode_time_run = 0.
         ode_iterations = 0
         ode_loss = nothing
         sol = nothing
+        ode_x = nothing
     end
     if maxiterations_optim > 0
         if verbosity > 0
@@ -1238,7 +1245,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
     if !isnothing(ode_loss) && loss > ode_loss
         @warn "Loss after optimizer is larger than after ode by $(loss - ode_loss)."
     end
-    rawres = (; ode = sol, optim = res,
+    rawres = (; ode = sol, optim = res, ode_x,
               x, init = p, loss, ode_loss, gnorm, gnorm_regularized,
               ode_time_run, ode_iterations, net, optim_time_run,
               optim_iterations, trajectory, lossfunc, transpose_solution)
@@ -1295,7 +1302,7 @@ _extract(::Val{:gnorm}, res) = res.gnorm
 _extract(::Val{:gnorm_regularized}, res) = res.gnorm_regularized
 _extract(::Val{:init}, res) = params2dict(transpose_solution(res, res.init))
 _extract(::Val{:x}, res) = params2dict(transpose_solution(res, res.x))
-_extract(::Val{:ode_x}, res) = isnothing(res.ode) ? nothing : params2dict(transpose_solution(res, res.ode.u[end]))
+_extract(::Val{:ode_x}, res) = isnothing(res.ode_x) ? nothing : params2dict(transpose_solution(res, res.ode_x))
 _extract(::Val{:ode_time_run}, res) = res.ode_time_run
 _extract(::Val{:ode_iterations}, res) = res.ode_iterations
 _extract(::Val{:optim_time_run}, res) = res.optim_time_run
