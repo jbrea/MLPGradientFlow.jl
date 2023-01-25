@@ -218,6 +218,7 @@ include("gaussian_input.jl")
 
 struct Dense{W, S1, T1, T2, T3, T4, T5, T6, T7, F}
     k::S1
+    i0::Int
     f::F
     bias::Bool
     nup::Int
@@ -247,8 +248,9 @@ alloc_delta(::Any, T, k, N) = StaticStrideArray(zeros(T, k, N))
 alloc_delta′(::Any, T, k, N) = StaticStrideArray(zeros(T, k, N))
 alloc_g(::Any, T, k, nup, N) = StaticStrideArray(zeros(T, nup, k, N))
 alloc_b(::Any, T, k, nup, N) = StaticStrideArray(zeros(T, k + nup, k, N))
-function Dense(T, k, N; nin, nup, f, w, bias, nextbias, derivs = 1)
+function Dense(T, k, N; nin, nup, f, w, bias, nextbias, i0 = 1, derivs = 1)
     Dense(StaticInt(k),
+          i0,
           f,
           bias,
           nup,
@@ -265,7 +267,7 @@ function Dense(T, k, N; nin, nup, f, w, bias, nextbias, derivs = 1)
 end
 function Dense(l::Dense; N = size(l.a, 2), derivs = 1)
     Dense(eltype(l.a), Int(l.k), N;
-          nup = l.nup, f = l.f, w = l.w,
+          nup = l.nup, f = l.f, w = l.w, i0 = l.i0,
           bias = l.bias, nin = l.nparams÷l.k - l.bias,
           nextbias = size(l.a, 1) > l.k, derivs)
 end
@@ -333,13 +335,18 @@ function Net(; layers, input::AbstractArray{T}, target::AbstractArray{S},
     if ismissing(last(layerspec)[1])
         layerspec = (layerspec[1:end-1]..., (size(target, 1), last(layerspec)[2:end]...))
     end
-    layers = tuple([Dense(T, k, N;
+    i0 = 1
+    layers = tuple([begin
+                    l = Dense(T, k, N;
                      derivs,
                      nin = dims[i],
                      nup = i == length(layerspec) ? 0 : sum(first.(layerspec[i+1:end])),
                      f, w = Val(Symbol(:w, i)),
-                     bias,
+                     bias, i0,
                      nextbias = i == length(layerspec) ? (layerspec[i][2] == softmax) : last(layerspec[i+1]))
+                    i0 += l.nparams
+                    l
+                    end
                for (i, (k, f, bias)) in pairs(layerspec)]...)
     target = StaticStrideArray(copy(target))
     Net(Int(sum(getproperty.(layers, :nparams))), Din, layerspec, layers, input, target)
@@ -355,21 +362,21 @@ end
 ### forward - backward
 ###
 
-propagate!(::Tuple{}, ::Any, ::Any, ::Any; kwargs...) = nothing
-function propagate!(layers::Tuple, x, input, i0 = 1;
+propagate!(::Tuple{}, ::Any, ::Any; kwargs...) = nothing
+function propagate!(layers::Tuple, x, input;
                     batch = indices(input, static(2)), derivs = 0)
     l = first(layers)
     if derivs == 0
-        A_mul_B!(l.a, l.f, getweights(l, x, i0), input, batch)
+        A_mul_B!(l.a, l.f, getweights(l, x), input, batch)
     elseif derivs == 1
-        A_mul_B!(l.a, l.a′, l.f, getweights(l, x, i0), input, batch)
+        A_mul_B!(l.a, l.a′, l.f, getweights(l, x), input, batch)
     else
-        A_mul_B!(l.a, l.a′, l.a′′, l.f, getweights(l, x, i0), input, batch)
+        A_mul_B!(l.a, l.a′, l.a′′, l.f, getweights(l, x), input, batch)
     end
-    propagate!(Base.tail(layers), x, l.a, i0+l.nparams; batch, derivs)
+    propagate!(Base.tail(layers), x, l.a; batch, derivs)
 end
-getweights(l, x::ComponentArray, ::Any) = getproperty(x, l.w)
-getweights(l, x, i0) = reshape(view(x, i0:i0+l.nparams-1), Int(l.k), :)
+getweights(l, x::ComponentArray) = getproperty(x, l.w)
+getweights(l, x) = reshape(view(x, l.i0:l.i0+l.nparams-1), Int(l.k), :)
 function forward!(net, x, input;
                   derivs = 1, copy_input = true, verbosity = 1,
                   batch = indices(input, static(2)))
@@ -510,26 +517,26 @@ function _backprop!(pdelta, pa′, pdelta′, pa′′, delta, w; batch = indice
         pdelta′[k, i] = deltaki * pa′′[k, i]
     end
 end
-function backprop!(layers, x, i0::Int = length(x);
+function backprop!(layers, x;
                    batch = indices(first(layers).a, static(2)), derivs = 1)
     length(layers) == 1 && return
     l = last(layers)
     front = Base.front(layers)
-    w = getweights(l, x, i0 - l.nparams + 1)
+    w = getweights(l, x)
     prev = last(front)
     if derivs == 1
         _backprop!(prev.delta, prev.a′, l.delta, w; batch)
     else
         _backprop!(prev.delta, prev.a′, prev.delta′, prev.a′′, l.delta, w; batch)
     end
-    backprop!(front, x, i0 - l.nparams; derivs, batch)
+    backprop!(front, x; derivs, batch)
 end
 get_input(::Tuple{}, input) = input
 get_input(layers, _) = last(layers).a
-function update_derivatives!(dx, layers, input, x, i0::Int = length(x);
+function update_derivatives!(dx, layers, input, x;
                              batch = indices(input, static(2)))
     l = last(layers)
-    dw = getweights(l, dx, i0 - l.nparams + 1)
+    dw = getweights(l, dx)
     delta = l.delta
     front = Base.front(layers)
     inp = get_input(front, input)
@@ -541,7 +548,7 @@ function update_derivatives!(dx, layers, input, x, i0::Int = length(x);
         dw[k, l] = wkl
     end
     length(front) == 0 && return
-    update_derivatives!(dx, front, input, x, i0 - l.nparams; batch)
+    update_derivatives!(dx, front, input, x; batch)
 end
 function gradient!(dx, net::Net, x;
                    forward = true, derivs = 1, verbosity = 1,
@@ -569,7 +576,7 @@ end
 function forward_g!(g, prev, layers, x, offset = StaticInt(0);
                     batch = indices(prev.a, static(2)))
     l = first(layers)
-    w = getproperty(x, l.w)
+    w = getweights(l, x)
     a′ = prev.a′
     if offset == 0
         @tturbo for l in 1:l.k, k in indices(g, 2), i in batch
@@ -652,7 +659,7 @@ function backprop_b!(b, g, layers, prev, x, offset = StaticInt(0);
             mse_backprop_b!(b, g, l, off, goff, batch, 2*scale)
         end
     else
-        w = getproperty(x, prev.w)
+        w = getweights(prev, x)
         oldoff = size(b, 1) - offset
         offset = offset + l.k
         off = size(b, 1) - offset
@@ -694,7 +701,7 @@ function _hessian!(h, l1, layers, inp1, inp2, prev, x,
                    batch = indices(inp1, static(2)))
     l2 = first(layers)
     if l1 === l2
-        w = getproperty(x, l1.w)
+        w = getweights(l1, x)
         b = l2.b
         hh = h.blocks[off1]
         @tturbo for k in indices(w, 1), j in indices(w, 2),
@@ -708,8 +715,8 @@ function _hessian!(h, l1, layers, inp1, inp2, prev, x,
         off += l1.k
     else
         a′ = prev.a′
-        w1 = getproperty(x, l1.w)
-        w2 = getproperty(x, l2.w)
+        w1 = getweights(l1, x)
+        w2 = getweights(l2, x)
         b = l2.b
         hh = h.blocks[off1]
         if l1.a′ === a′
@@ -1162,6 +1169,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                 trajectory = subsample(trajectory, n_samples_trajectory)
             end
             sol = nothing
+            ode_x = copy(x)
         else
             odef = ODEFunction(swapsign(g!), jac = swapsign(h!))
             prob = ODEProblem(odef, Array(x), (0., Float64(maxT)), (; net,))
@@ -1179,7 +1187,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
             ode_iterations = termin.condition.i[]
             if save_everystep
                 trajectory = [(t, copy(x .= sol(t)))
-                              for t in 10.0.^range(log10(sol.t[1]+1), log10(sol.t[end]+1-eps()), n_samples_trajectory) .- 1]
+                              for t in max.(sol.t[1], min.(sol.t[end], 10.0.^range(log10(sol.t[1]+1), log10(sol.t[end]+1), n_samples_trajectory) .- 1))]
             end
             x .= sol[end]
             ode_x = copy(x)
