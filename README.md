@@ -6,6 +6,7 @@ $$\dot \theta = -\nabla_\theta \big(L(\theta) + R(\theta)\big)$$
 with barrier function
 $$
 R(\theta) = \left\{\begin{array}{cl} 0 & \mbox{if } \frac12\|\theta\|_2^2 \leq c\\\big(\frac12\|\theta\|_2^2 - c\big)^2 & \mbox{otherwise}
+\end{array}\right.
 $$
 
 Activation functions can be e.g. `MLPGradientFlow.relu`, `MLPGradientFlow.sigmoid`, `MLPGradientFlow.tanh`, `MLPGradientFlow.softplus` or `MLPGradientFlow.g` (`g(x) = sigmoid(4x) + softplus(x)`).
