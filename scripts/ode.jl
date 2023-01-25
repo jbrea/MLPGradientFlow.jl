@@ -1,15 +1,24 @@
 include(joinpath(@__DIR__, "helper.jl"))
+using Sundials
 
 function trajectory_distance(traj, ref)
     xtraj = params.(collect(values(traj)))
-    xref = params.(collect(values(ref)))
+    xref = collect(values(ref))
     dists = Float64[]
     idxs = Int[]
     i0 = 1
     for x in xtraj
-        d, i = findmin((x2 -> sum(abs2, x2 - x)).(xref[i0:end]))
+        d = Inf
+        for j in i0:length(xref)
+            dj = sum(abs2, params(xref[j]) - x)
+            if dj ≤ d
+                d = dj
+                i0 = j
+            else
+                break
+            end
+        end
         push!(dists, d)
-        i0 += i - 1
         push!(idxs, i0)
         if i0 == length(xref)
             @warn "reached end of reference"
@@ -20,14 +29,16 @@ function trajectory_distance(traj, ref)
 end
 function dist_and_t(traj, ref)
     d, t, _ = trajectory_distance(traj, ref)
+    GC.gc()
     mean(d), maximum(t)
 end
 
 function run_trajectory_comparison(algs, id;
         ref_alg = KenCarp58(), maxtime = 20, seed = 123, kwargs...)
-    net, x = setup(; seed, kwargs...)
-    ref = train(net, x, alg = ref_alg, maxtime_ode = 2*maxtime, maxiterations_optim = 0,
-                n_samples_trajectory = 10^4)
+    net, x, = setup(; seed, kwargs...)
+    ref = train(net, x, alg = ref_alg, maxtime_ode = 1.2*maxtime,
+                maxiterations_optim = 0,
+                n_samples_trajectory = 10^6, exclude = ["loss_curve"])
     res = [train(net, x; alg,
                        maxtime_ode = maxtime,
                        maxiterations_optim = 0,
@@ -44,6 +55,7 @@ end
 
 methods() = Dict("KenCarp58" => KenCarp58(),
                  "RK4" => RK4(),
+                 "CVODE" => CVODE_BDF(linear_solver=:GMRES),
                  "Rodas5" => Rodas5(autodiff = false),
                  "Descent001" => Descent(1e-3),
                  "Descent01" => Descent(.01),
@@ -53,16 +65,19 @@ methods() = Dict("KenCarp58" => KenCarp58(),
 # warmup
 run_trajectory_comparison(methods(), "small", seed = 1, maxtime = 1)
 
-results_small = vcat([run_trajectory_comparison(methods(), "small", seed = i)
+results_small = vcat([run_trajectory_comparison(methods(), "small",
+                                                seed = i,
+                                                ref_alg = Rodas5(autodiff = false))
                       for i in 101:110]...)
 serialize("ode_results_small.dat", results_small)
 
 # warmup
 run_trajectory_comparison(methods(), "large", seed = 1, maxtime = 1,
-                          Din = 4, r = 128)
+                          Din = 4, r = 100)
 
 results_large = vcat([run_trajectory_comparison(methods(), "large", seed = i,
-                                                Din = 4, r = 128, maxtime = 120)
+                                                Din = 4, r = 100, maxtime = 120,
+                                                ref_alg = CVODE_BDF(linear_solver=:GMRES))
                       for i in 101:110]...)
 serialize("ode_results_large.dat", results_large)
 
@@ -87,6 +102,7 @@ function plot(results; y, ylabel, title = "")
                  Rodas5 = {mark = "*", color = colors[5]},
                  KenCarp58 = {mark = "*", color = colors[4]},
                  RK4 = {mark = "*", color = colors[3]},
+                 CVODE = {mark = "square*", color = colors[3]},
                  Descent01 = {mark = "*", color = colors[2]},
                  Descent001 = {mark = "square*", color = colors[2]},
                  Adam001 = {mark = "*", color = colors[1]},
@@ -96,8 +112,8 @@ function plot(results; y, ylabel, title = "")
                Table({x = "dist", y = y, meta = "method"},
                      results)
               ),
-          VLine({dashed, black}, 1e-5),
-          Legend(["Rodas5", "KenCarp58", "RK4", "Descent(0.01)", "Descent(0.001)",
+          Legend(["Rodas5", "KenCarp58", "RK4", "CVODE\\_BDF",
+                  "Descent(0.01)", "Descent(0.001)",
                   "Adam(0.001)", "Adam(0.0001)"])
          )
 end
@@ -105,9 +121,9 @@ end
 results_small = deserialize("ode_results_small.dat")
 results_large = deserialize("ode_results_large.dat")
 
-f1 = plot(results_small, y = "t", ylabel = "simulated time \$t_m\$", title = "33 parameters")
+f1 = plot(results_small, y = "t", ylabel = "progress \$t_m\$", title = "33 parameters")
 f2 = plot(results_small, y = "loss", ylabel = "final loss")
-f3 = plot(results_large, y = "t", ylabel = "simulated time \$t_m\$", title = "769 parameters")
+f3 = plot(results_large, y = "t", ylabel = "progress \$t_m\$", title = "601 parameters")
 f4 = plot(results_large, y = "loss", ylabel = "final loss")
 
 pgfsave("results_small_time.tikz", f1)
