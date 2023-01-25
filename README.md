@@ -4,9 +4,9 @@ This package allows to integrate the gradient flow of the loss
 function of multi-layer perceptrons,
 $$\dot \theta = -\nabla_\theta \big(L(\theta) + R(\theta)\big)$$
 with barrier function
-$$R(\theta) = \left\{\begin{matrix} 0 & \mbox{if } \frac12\|\theta\|_2^2 \leq c\\\big(\frac12\|\theta\|_2^2 - c\big)^2 & \mbox{otherwise}\end{matrix}\right.$$
+$$R(\theta) =  \big(\frac12\|\theta\|_2^2 - c\big)^2 \mbox{if } \frac12\|\theta\|_2^2 > c \mbox{ and 0 otherwise}\, .$$
 
-Activation functions can be e.g. `MLPGradientFlow.relu`, `MLPGradientFlow.sigmoid`, `MLPGradientFlow.tanh`, `MLPGradientFlow.softplus` or `MLPGradientFlow.g` (`g(x) = sigmoid(4x) + softplus(x)`).
+Activation functions can be e.g. `relu`, `sigmoid` ($1/(1 + \exp(-x))$), `sigmoid2` ($erf(x/\sqrt2)$), `tanh`, `softplus`, `gelu`, `g` (`g(x) = sigmoid(4x) + softplus(x)`), or `softmax` (in the output layer).
 
 ## Installation
 
@@ -67,7 +67,7 @@ res = MLPGradientFlow.train(n, ps,
                             maxiterations_optim = 10^3, verbosity = 1)
 
 
-# Neural networks without biases and with only a single hidden layer, can also train under the assumption of normally distributed input. For relu the implementation uses analytical values for the gaussian integrals (use `f = Val(relu)` for the analytical integration and `f = relu` for the numerical integration). For other activation functions, numerical integration of approximations thereof have to be used.
+# Neural networks without biases and with only a single hidden layer, can also train under the assumption of normally distributed input. For relu and sigmoid2 the implementation uses analytical values for the gaussian integrals (use `f = Val(relu)` for the analytical integration and `f = relu` for the numerical integration). For other activation functions, numerical integration of approximations thereof have to be used.
 using LinearAlgebra, ComponentArrays
 d = 9
 inp = randn(d, 10^5)
@@ -83,6 +83,17 @@ p = random_params(n)
 xt = ComponentVector(w1 = w_teach, w2 = a_teach)
 ni = NetI(p, xt, Val(relu))
 res = train(ni, p, maxiterations_ode = 10^3, maxiterations_optim = 0)
+
+# Recommendations for different activation functions:
+# Using analytical integrals:
+# - NetI(p, xt, Val(relu))
+# - NetI(p, xt, Val(sigmoid2))
+# Using approximations:
+# - NetI(p, xt, load_potential_approximator(softplus))
+# - NetI(p, xt, load_potential_approximator(gelu))
+# - NetI(p, xt, load_potential_approximator(g))
+# - NetI(p, xt, load_potential_approximator(tanh))
+# - NetI(p, xt, load_potential_approximator(sigmoid))
 
 # compare the loss computed with finite data to the loss computed with infinite data
 loss(n, params(res["init"])) # finite data
