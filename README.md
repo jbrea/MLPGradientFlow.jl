@@ -6,7 +6,7 @@ $$\dot \theta = -\nabla_\theta \big(L(\theta) + R(\theta)\big)$$
 with barrier function
 $$R(\theta) =  \big(\frac12\|\theta\|_2^2 - c\big)^2 \mbox{if } \frac12\|\theta\|_2^2 > c \mbox{ and 0 otherwise}\, .$$
 
-Activation functions can be e.g. `relu`, `sigmoid` ($1/(1 + \exp(-x))$), `sigmoid2` ($erf(x/\sqrt2)$), `tanh`, `softplus`, `gelu`, `g` (`g(x) = sigmoid(4x) + softplus(x)`), or `softmax` (in the output layer).
+Activation functions can be e.g. `relu`, `sigmoid` ( $1/(1 + \exp(-x))$ ), `sigmoid2` ( $erf(x/\sqrt{2})$ ), `tanh`, `softplus`, `gelu`, `g` (`g(x) = sigmoid(4x) + softplus(x)`), or `softmax` (in the output layer).
 
 ## Installation
 
