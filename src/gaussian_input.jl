@@ -125,6 +125,7 @@ end
 g3(f::PotentialApproximator, r) = g3(f.f, r)
 g3(f::Function, r) = nex(x -> f(r*x)^2)
 g3(::Val{relu}, r) = r^2/2
+g3(::Val{sigmoid2}, r) = 2/pi*asin(r^2/(1 + r^2))
 function g3(f::PotentialApproximator, r1, r2, u)
     f.g(r1, r2, u)[1]
 end
@@ -146,6 +147,7 @@ function g3(::Val{relu}, r1, r2, u)
         max(0., r1*r2/(2π)*(sqrt(1-u^2)+(π - acos(u))*u))
     end
 end
+g3(::Val{sigmoid2}, r1, r2, u) = 2/pi*asin(r1*r2*u/(sqrt(1 + r1^2)*sqrt(1 + r2^2)))
 function dgdr(f::PotentialApproximator, r)
     dgdr(f.f, r)
 end
@@ -154,6 +156,7 @@ function dgdr(f::Function, r)
     nex(x -> 2*f(r*x)*f′(r*x)*x)
 end
 dgdr(::Val{relu}, r) = r
+dgdr(::Val{sigmoid2}, r) = (4*r)/(sqrt(2*r^2 + 1)*(π*r^2 + π))
 function d2gdr(f::PotentialApproximator, r)
     d2gdr(f.f, r)
 end
@@ -163,6 +166,7 @@ function d2gdr(f::Function, r; kwargs...)
     nex(x -> 2*x^2*(f(r*x)*f′′(r*x)+f′(r*x)^2))
 end
 d2gdr(::Val{relu}, r) = 1
+d2gdr(::Val{sigmoid2}, r) = -(4*(4*r^4 + r^2 - 1))/(π*(r^2 + 1)^2*(2*r^2 + 1)^(3/2))
 function dgdru(f::PotentialApproximator, r1, r2, u)
     f.dgdru(r1, r2, u)
 end
@@ -175,6 +179,10 @@ end
 function dgdru(::Val{relu}, r1, r2, u)
     r2/(2π)*(sqrt(1-u^2)+(π - acos(u))*u),
     r1*r2/(2π) * (π - acos(u))
+end
+function dgdru(::Val{sigmoid2}, r1, r2, u)
+    (2*r2*u)/(π*(r1^2 + 1)*sqrt(r1^2*(1 - r2^2*(u^2 - 1)) + r2^2 + 1)),
+    (2*r1*r2)/(π*sqrt(r1^2*(1 - r2^2*(u^2 - 1)) + r2^2 + 1))
 end
 function d2gdru(f::PotentialApproximator, r1, r2, u)
     f.d2gdru(r1, r2, u)
@@ -196,6 +204,13 @@ function d2gdru(::Val{relu}, r1, r2, u)
     r2/(2π) * (π - acos(u)), # 13
     r1/(2π) * (π - acos(u)), # 23
     r1*r2/(2π*sqrt(1 - u^2)) # 33
+end
+function d2gdru(::Val{sigmoid2}, r1, r2, u)
+    -(6*r1*(r1^2 + 1)*(r2^3 + r2)*u - 2*r1*(3*r1^2 + 1)*r2^3*u^3)/(π*(r1^2 + 1)^2*(r1^2 *(1 - r2^2*(u^2 - 1)) + r2^2 + 1)^(3/2)),
+    (2*u)/(π*(r1^2*(1 - r2^2*(u^2 - 1)) + r2^2 + 1)^(3/2)),
+    (2*r2*(r2^2 + 1))/(π*(r1^2*(-(r2^2*(u^2 - 1) - 1)) + r2^2 + 1)^(3/2)),
+    (2*r1*(r1^2 + 1))/(π*(r2^2*(-(r1^2*(u^2 - 1) - 1)) + r1^2 + 1)^(3/2)),
+    (2*r1^3*r2^3*u)/(π*(r1^2*(-(r2^2*(u^2 - 1) - 1)) + r2^2 + 1)^(3/2))
 end
 
 
@@ -575,6 +590,7 @@ function train(net::NetI, p;
     lossfunc = u -> loss(net, u; losstype, transpose = false)
     train(net, lossfunc, g!, h!, fgh!, fg!, x;
           loss_scale, verbosity, losstype, transpose_solution = transpose,
+          use_component_arrays = true,
           minloss,
           kwargs...)
 end

@@ -8,7 +8,7 @@ using NLopt
 
 export Net, NetI, Adam, Descent, FullBatch, MiniBatch, ScheduledMiniBatch
 export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict
-export sigmoid, softplus, g, gelu, square, relu, softmax
+export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2
 export load_potential_approximator, picke, unpickle
 
 ###
@@ -53,8 +53,8 @@ g′′(x) = 16*sigmoid′′(4x) + sigmoid′(x)
 
 const invsqrt2 = 1/sqrt(2)
 const invsqrtπ = 1/sqrt(π)
-gelu(x) = SLEEFPirates.gelu(x)
-gelu′(x::T, y) where T = IfElse.ifelse(x == zero(T), T(0.5), y/x) + x*invsqrtπ*invsqrt2*Base.exp(-x^2/2)
+gelu(x) = 0.5 * x * (1 + sigmoid2(x))
+gelu′(x, y) = IfElse.ifelse(x == 0, 0.5, y/x) + x*invsqrtπ*invsqrt2*Base.exp(-x^2/2)
 gelu′(x) = gelu′(x, gelu(x))
 gelu′′(x) = invsqrtπ*invsqrt2*(2 - x^2)*Base.exp(-x^2/2)
 gelu′′(x, y, y′) = gelu′′(x)
@@ -78,6 +78,14 @@ function tanh′′(x)
     y = tanh(x)
     tanh′′(x, y, tanh′(x, y))
 end
+
+sigmoid2(x::T) where T = LoopVectorization.erf(x * 0.7071067811865476)
+deriv(::typeof(sigmoid2)) = sigmoid2′
+second_deriv(::typeof(sigmoid2)) = sigmoid2′′
+sigmoid2′(x::T) where T = 0.7978845608028654 * Base.exp(-x^2/2)
+sigmoid2′(x, y) = sigmoid2′(x)
+sigmoid2′′(x, y, y′) = -x*y′
+sigmoid2′′(x) = sigmoid2′′(x, nothing, sigmoid2′(x))
 
 function deriv(f; multiargs = true)
     if multiargs
@@ -1133,6 +1141,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
                loss_scale = 1.,
                minloss = 2e-32*size(net.input, 2)/loss_scale,
+               use_component_arrays = false,
                n_samples_trajectory = 100,
                include = nothing,
                exclude = String[],
@@ -1172,7 +1181,8 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
             ode_x = copy(x)
         else
             odef = ODEFunction(swapsign(g!), jac = swapsign(h!))
-            prob = ODEProblem(odef, Array(x), (0., Float64(maxT)), (; net,))
+            x0 = use_component_arrays ? x : Array(x)
+            prob = ODEProblem(odef, x0, (0., Float64(maxT)), (; net,))
             termin = terminator(; maxtime = maxtime_ode,
                                   maxiter = maxiterations_ode,
                                   minloss = minloss,
