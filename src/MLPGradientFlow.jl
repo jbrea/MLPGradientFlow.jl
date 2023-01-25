@@ -689,7 +689,8 @@ function backprop_b!(b, g, layers, prev, x, offset = StaticInt(0);
                 for r in 1:prev.k
                     bki += w[r, n] * b[r + oldoff, k, i]
                 end
-                b[n + off, k, i] = g[n + goff, k, i] * delta′[n, i] + T(l.a′[n, i]) * bki
+                b[n + off, k, i] = g[n + goff, k, i] * delta′[n, i]
+                b[n + off, k, i] += T(a′[n, i]) * bki
             end
         end
     end

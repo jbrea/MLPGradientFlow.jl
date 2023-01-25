@@ -160,9 +160,9 @@ end
     x = params(θ...)
     fw_loss = fw_lossfunc(input, target, f, scale = 1)
     H = hessian(n, x)
-    @test H ≈ ForwardDiff.hessian(fw_loss, flatten(θ)) rtol = 1e-3
+    @test H ≈ ForwardDiff.hessian(fw_loss, flatten(θ))
     Hs = hessian(n, x, scale = 3.4)
-    @test Hs ≈ 3.4*H rtol = 1e-3
+    @test Hs ≈ 3.4*H
     e, v = hessian_spectrum(n, x)
     @test size(v) == (31, 31)
 end
