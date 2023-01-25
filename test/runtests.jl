@@ -5,11 +5,12 @@ using Test
 
 @testset "activation functions" begin
     import MLPGradientFlow: g, sigmoid, tanh, square, relu, gelu, softplus, deriv, second_deriv, A_mul_B!, alloc_a′, alloc_a′′
-    for f in (g, sigmoid, square, relu, gelu, tanh, softplus)
+    for f in (g, sigmoid, square, relu, gelu, tanh, softplus, sigmoid2)
         @info "testing activation function $f."
         inp = [-.2, 3.]'
         y = f.(inp)
-        ff = f == gelu ? x -> x/2*erfc(-x/sqrt(2)) : f
+        ff = f == gelu ? x -> x/2*(1 + erf(x/sqrt(2))) : f == sigmoid2 ? x -> erf(x/sqrt(2)) : f
+        @test ff.(inp) ≈ f.(inp)
         y′ = ForwardDiff.derivative.(ff, inp)
         y′′ = ForwardDiff.derivative.(x -> ForwardDiff.derivative(ff, x), inp)
         w = ones(1, 1)
@@ -159,9 +160,9 @@ end
     x = params(θ...)
     fw_loss = fw_lossfunc(input, target, f, scale = 1)
     H = hessian(n, x)
-    @test H ≈ ForwardDiff.hessian(fw_loss, flatten(θ)) rtol = 1e-5
+    @test H ≈ ForwardDiff.hessian(fw_loss, flatten(θ)) atol = 1e-5
     Hs = hessian(n, x, scale = 3.4)
-    @test Hs ≈ 3.4*H rtol = 1e-5
+    @test Hs ≈ 3.4*H atol = 1e-5
     e, v = hessian_spectrum(n, x)
     @test size(v) == (31, 31)
 end
