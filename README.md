@@ -1,11 +1,12 @@
 # MLPGradientFlow.jl
 
-This package allows to integrate the gradient flow (in Euclidean metric) of the loss
+This package allows to integrate the gradient flow of the loss
 function of multi-layer perceptrons,
 $$\dot \theta = -\nabla_\theta \big(L(\theta) + R(\theta)\big)$$
 with barrier function
-$$R(\theta) = I\big(\frac{1}{2}\|\theta\|_2^2 > c\big)\big(\frac{1}{2}\|\theta\|_2^2 - c\big)^2 ,$$
-where $I(\mathrm{true}) = 1, I(\mathrm{false}) = 0$.
+$$
+R(\theta) = \left\{\begin{array}{cl} 0 & \mbox{if } \frac12\|\theta\|_2^2 \leq c\\\big(\frac12\|\theta\|_2^2 - c\big)^2 & \mbox{otherwise}
+$$
 
 Activation functions can be e.g. `MLPGradientFlow.relu`, `MLPGradientFlow.sigmoid`, `MLPGradientFlow.tanh`, `MLPGradientFlow.softplus` or `MLPGradientFlow.g` (`g(x) = sigmoid(4x) + softplus(x)`).
 
