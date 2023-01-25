@@ -160,9 +160,9 @@ end
     x = params(θ...)
     fw_loss = fw_lossfunc(input, target, f, scale = 1)
     H = hessian(n, x)
-    @test H ≈ ForwardDiff.hessian(fw_loss, flatten(θ)) atol = 1e-5
+    @test H ≈ ForwardDiff.hessian(fw_loss, flatten(θ)) rtol = 1e-3
     Hs = hessian(n, x, scale = 3.4)
-    @test Hs ≈ 3.4*H atol = 1e-5
+    @test Hs ≈ 3.4*H rtol = 1e-3
     e, v = hessian_spectrum(n, x)
     @test size(v) == (31, 31)
 end
@@ -247,8 +247,8 @@ end
     @test G == gradient(n, x[1])
     @test H == hessian(n, x[1])
     i = findfirst(d -> params(d[1]["init"]) == x[1], res_distr)
-    @test params(res["x"]) ≈ params(res_distr[i][1]["x"]) rtol = 1e-3
-    @test res["loss"] ≈ res_distr[i][1]["loss"] rtol = 1e-3
+    @test params(res["x"]) ≈ params(res_distr[i][1]["x"]) atol = 1e-5
+    @test res["loss"] ≈ res_distr[i][1]["loss"] atol = 1e-5
     # with bias
     n = Net(layers = ((2, g, true), (1, sigmoid, true)),
             input = rand(2, 100), target = rand(1, 100))
