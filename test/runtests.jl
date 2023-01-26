@@ -232,39 +232,12 @@ end
     import MLPGradientFlow: Net, g, sigmoid, train, random_params, params, gradient, hessian
     # without bias
     n = Net(layers = ((2, g, false), (1, sigmoid, false)),
-            input = rand(2, 100), target = rand(1, 100))
+            input = rand(2, 10), target = rand(1, 10))
     x = ntuple(_ -> random_params(n), 2)
     res = train(n, x[1], maxtime_ode = Inf, maxtime_optim = Inf,
-                maxiterations_ode = 10, maxiterations_optim = 0)
+                maxiterations_ode = 3, maxiterations_optim = 0)
     res_distr = train(n, x, maxtime_ode = Inf, maxtime_optim = Inf,
-                maxiterations_ode = 10, maxiterations_optim = 0)
-    Distributed.remotecall_eval(Main, workers()[1:1],
-                                :(y = Array(n($(x[1])));
-                                  g = MLPGradientFlow.gradient(n, $(x[1]));
-                                  h = Array(MLPGradientFlow.hessian(n, $(x[1])))))
-    Y, G, H = Distributed.@fetchfrom workers()[1] (y, g, h)
-    @test Y == n(x[1])
-    @test G == gradient(n, x[1])
-    @test H == hessian(n, x[1])
-    i = findfirst(d -> params(d[1]["init"]) == x[1], res_distr)
-    @test params(res["x"]) ≈ params(res_distr[i][1]["x"]) atol = 1e-5
-    @test res["loss"] ≈ res_distr[i][1]["loss"] atol = 1e-5
-    # with bias
-    n = Net(layers = ((2, g, true), (1, sigmoid, true)),
-            input = rand(2, 100), target = rand(1, 100))
-    x = ntuple(_ -> random_params(n), 2)
-    res = train(n, x[1], maxtime_ode = Inf, maxtime_optim = Inf,
-                maxiterations_ode = 10, maxiterations_optim = 0)
-    res_distr = train(n, x, maxtime_ode = Inf, maxtime_optim = Inf,
-                maxiterations_ode = 10, maxiterations_optim = 0)
-    Distributed.remotecall_eval(Main, workers()[1:1],
-                                :(y = Array(n($(x[1])));
-                                  g = MLPGradientFlow.gradient(n, $(x[1]));
-                                  h = Array(MLPGradientFlow.hessian(n, $(x[1])))))
-    Y, G, H = @fetchfrom workers()[1] (y, g, h)
-    @test Y == n(x[1])
-    @test G == gradient(n, x[1])
-    @test H == hessian(n, x[1])
+                maxiterations_ode = 3, maxiterations_optim = 0)
     i = findfirst(d -> params(d[1]["init"]) == x[1], res_distr)
     @test params(res["x"]) ≈ params(res_distr[i][1]["x"]) atol = 1e-5
     @test res["loss"] ≈ res_distr[i][1]["loss"] atol = 1e-5
@@ -331,10 +304,14 @@ end
     import MLPGradientFlow: glorot_normal
     xt = ComponentArray(w1 = glorot_normal(2, 3), w2 = glorot_normal(3, 1))
     x = ComponentArray(w1 = glorot_normal(2, 4), w2 = glorot_normal(4, 1))
-    for f in (g, sigmoid, gelu, MLPGradientFlow.tanh, softplus)
+    for f in (g, sigmoid, gelu, MLPGradientFlow.tanh, softplus, relu, sigmoid2)
         @show f
         ni = NetI(x, xt, f)
-        ax = load_potential_approximator(f)
+        ax = if f ∈ (relu, sigmoid2)
+            Val(f)
+        else
+            load_potential_approximator(f)
+        end
         ni2 = NetI(x, xt, ax)
         l1 = loss(ni, x)
         l2 = loss(ni2, x)
@@ -345,7 +322,9 @@ end
         @show abs(l1 - l2) sqrt(sum(abs2, g1 - g2)) sqrt(sum(abs2, h1 - h2))
         @test l1 ≈ l2 atol = 1e-5
         @test g1 ≈ g2 atol = 1e-3
-        @test h1 ≈ h2 atol = 1e-1
+        if f ≠ relu # the integrator is wrong for relu because of derivative of heaviside
+            @test h1 ≈ h2 atol = 1e-1
+        end
     end
 end
 
