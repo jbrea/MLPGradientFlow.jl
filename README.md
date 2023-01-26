@@ -8,6 +8,8 @@ $$R(\theta) =  \big(\frac12\|\theta\|_2^2 - c\big)^2 \mbox{if } \frac12\|\theta\
 
 Activation functions can be e.g. `relu`, `sigmoid` ( $1/(1 + \exp(-x))$ ), `sigmoid2` ( $erf(x/\sqrt{2})$ ), `tanh`, `softplus`, `gelu`, `g` (`g(x) = sigmoid(4x) + softplus(x)`), or `softmax` (in the output layer).
 
+For more details see [MLPGradientFlow: going with the flow of multilayer perceptrons (and finding minima fast and accurately)](https://arxiv.org/abs/2301.10638).
+
 ## Installation
 
 ### From Julia
