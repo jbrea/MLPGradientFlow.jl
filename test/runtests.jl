@@ -1,7 +1,9 @@
 using MLPGradientFlow
-using ForwardDiff, ComponentArrays, Statistics, SpecialFunctions, FiniteDiff
+using ForwardDiff, ComponentArrays, Statistics, SpecialFunctions, FiniteDiff, Random
 using Distributed
 using Test
+
+Random.seed!(123)
 
 @testset "activation functions" begin
     import MLPGradientFlow: g, sigmoid, tanh, square, relu, gelu, softplus, deriv, second_deriv, A_mul_B!, alloc_a′, alloc_a′′
@@ -229,14 +231,16 @@ end
 end
 
 @testset "distributed" begin
-    import MLPGradientFlow: Net, g, sigmoid, train, random_params, params, gradient, hessian
+    import MLPGradientFlow: Net, g, sigmoid, train, random_params, params, gradient, hessian, RK4
     # without bias
     n = Net(layers = ((2, g, false), (1, sigmoid, false)),
             input = rand(2, 10), target = rand(1, 10))
     x = ntuple(_ -> random_params(n), 2)
     res = train(n, x[1], maxtime_ode = Inf, maxtime_optim = Inf,
+                alg = RK4(),
                 maxiterations_ode = 3, maxiterations_optim = 0)
     res_distr = train(n, x, maxtime_ode = Inf, maxtime_optim = Inf,
+                alg = RK4(),
                 maxiterations_ode = 3, maxiterations_optim = 0)
     i = findfirst(d -> params(d[1]["init"]) == x[1], res_distr)
     @test params(res["x"]) ≈ params(res_distr[i][1]["x"]) atol = 1e-5
