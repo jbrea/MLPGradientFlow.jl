@@ -3,7 +3,7 @@ module MLPGradientFlow
 using ComponentArrays, LoopVectorization, OrdinaryDiffEq, ArrayInterface, Static,
       Optim, IfElse, LinearAlgebra, Distributed, Dates, Printf, Pkg,
       OrderedCollections, SLEEFPirates, LazyArtifacts, Random,
-      StrideArraysCore, Pickle, Cuba, HCubature, ForwardDiff
+      StrideArraysCore, Pickle, Cuba, HCubature, ForwardDiff, SpecialFunctions
 using NLopt
 
 export Net, NetI, Adam, Descent, FullBatch, MiniBatch, ScheduledMiniBatch
@@ -79,7 +79,7 @@ function tanh′′(x)
     tanh′′(x, y, tanh′(x, y))
 end
 
-sigmoid2(x::T) where T = LoopVectorization.erf(x * 0.7071067811865476)
+sigmoid2(x::T) where T = erf(x * 0.7071067811865476)
 deriv(::typeof(sigmoid2)) = sigmoid2′
 second_deriv(::typeof(sigmoid2)) = sigmoid2′′
 sigmoid2′(x::T) where T = 0.7978845608028654 * Base.exp(-x^2/2)
@@ -1147,6 +1147,17 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                include = nothing,
                exclude = String[],
                transpose_solution = false,
+               optim_options = Optim.Options(iterations = maxiterations_optim,
+                                               time_limit = maxtime_optim,
+                                               f_abstol = -eps(),
+                                               f_reltol = -eps(),
+                                               x_abstol = -eps(),
+                                               x_reltol = -eps(),
+                                               allow_f_increases = true,
+                                               callback = x -> x.value < minloss,
+                                               g_abstol = g_tol,
+                                               g_reltol = g_tol,
+                                              )
     )
     x = copy(p)
     G = zero(x)
@@ -1232,17 +1243,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
         else # Optim
             res = Optim.optimize(Optim.only_fgh!(fgh!), x,
                                  optim_solver,
-                                 Optim.Options(iterations = maxiterations_optim,
-                                               time_limit = maxtime_optim,
-                                               f_abstol = -eps(),
-                                               f_reltol = -eps(),
-                                               x_abstol = -eps(),
-                                               x_reltol = -eps(),
-                                               allow_f_increases = true,
-                                               callback = x -> x.value < minloss,
-                                               g_abstol = g_tol,
-                                               g_reltol = g_tol,
-                                              ))
+                                 optim_options)
             x = res.minimizer
             optim_time_run = res.time_run
             optim_iterations = res.iterations
