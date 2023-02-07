@@ -57,6 +57,7 @@ function nex_integrand(f)
     end
 end
 nex(f; kwargs...) = hquadrature(nex_integrand(f), 0., 1.; atol = TOL.atol[], rtol = TOL.rtol[], kwargs...)[1]
+nex(f::Tuple; kwargs...) = [nex(fi; kwargs...) for fi in f]
 
 ###
 ### Potentials and their derivatives
@@ -130,18 +131,18 @@ function g3(f::PotentialApproximator, r1, r2, u)
     f.g(r1, r2, u)[1]
 end
 function g3(f::Function, r1, r2, u)
-    if u ≈ 1
+    if isapprox(u, 1, atol = 1e-5)
         nex(x -> f(r1*x)*f(r2*x))
-    elseif u ≈ -1
+    elseif isapprox(u, -1, atol = 1e-5)
         nex(x -> f(r1*x)*f(-r2*x))
     else
         mvnex((x, y) -> f(r1*x)*f(r2*y), u)
     end
 end
 function g3(::Val{relu}, r1, r2, u)
-    if u ≈ 1
+    if isapprox(u, 1, atol = 1e-5)
         r1*r2/2
-    elseif u ≈ -1
+    elseif isapprox(u, -1, atol = 1e-5)
         0.
     else
         max(0., r1*r2/(2π)*(sqrt(1-u^2)+(π - acos(u))*u))
@@ -172,9 +173,19 @@ function dgdru(f::PotentialApproximator, r1, r2, u)
 end
 function dgdru(f::Function, r1, r2, u)
     f′ = deriv(f)
-    funcs = ((x, y) -> f′(r1 * x)*x*f(r2*y),
-             (x, y) -> r1 * r2 * f′(r1*x)*f′(r2*y))
-    mvnex(funcs, u)
+    if isapprox(u, 1, atol = 1e-5)
+        funcs = (x -> f′(r1 * x)*x*f(r2*x),
+                 x -> r1 * r2 * f′(r1*x)*f′(r2*x))
+        nex(funcs)
+    elseif isapprox(u, -1, atol = 1e-5)
+        funcs = (x -> f′(r1 * x)*x*f(-r2*x),
+                 x -> r1 * r2 * f′(r1*x)*f′(-r2*x))
+        nex(funcs)
+    else
+        funcs = ((x, y) -> f′(r1 * x)*x*f(r2*y),
+                 (x, y) -> r1 * r2 * f′(r1*x)*f′(r2*y))
+        mvnex(funcs, u)
+    end
 end
 function dgdru(::Val{relu}, r1, r2, u)
     r2/(2π)*(sqrt(1-u^2)+(π - acos(u))*u),
@@ -190,13 +201,31 @@ end
 function d2gdru(f::Function, r1, r2, u)
     f′ = deriv(f)
     f′′ = second_deriv(f)
-    funcs = ((x, y) -> f′′(r1 * x)*x^2*f(r2*y),
-             (x, y) -> f′(r1 * x)*x*f′(r2*y)*y,
-             (x, y) -> r2 * f′(r1*x)*f′(r2*y) + r1*r2*f′′(r1*x)*x*f′(r2*y),
-             (x, y) -> r1 * f′(r1*x)*f′(r2*y) + r1*r2*f′(r1*x)*y*f′′(r2*y),
-             (x, y) -> r1^2 * r2^2 * f′′(r1*x) * f′′(r2*y)
-            )
-    mvnex(funcs, u)
+    if isapprox(u, 1, atol = 1e-5)
+        funcs = (x -> f′′(r1 * x)*x^2*f(r2*x),
+                 x -> f′(r1 * x)*x*f′(r2*x)*x,
+                 x -> r2 * f′(r1*x)*f′(r2*x) + r1*r2*f′′(r1*x)*x*f′(r2*x),
+                 x -> r1 * f′(r1*x)*f′(r2*x) + r1*r2*f′(r1*x)*x*f′′(r2*x),
+                 x -> r1^2 * r2^2 * f′′(r1*x) * f′′(r2*x)
+                )
+        nex(funcs)
+    elseif isapprox(u, -1, atol = 1e-5)
+        funcs = (x -> f′′(r1 * x)*x^2*f(-r2*x),
+                 x -> -f′(r1 * x)*x*f′(-r2*x)*x,
+                 x -> r2 * f′(r1*x)*f′(-r2*x) + r1*r2*f′′(r1*x)*x*f′(-r2*x),
+                 x -> r1 * f′(r1*x)*f′(-r2*x) - r1*r2*f′(r1*x)*x*f′′(-r2*x),
+                 x -> r1^2 * r2^2 * f′′(r1*x) * f′′(-r2*x)
+                )
+        nex(funcs)
+    else
+        funcs = ((x, y) -> f′′(r1 * x)*x^2*f(r2*y),
+                 (x, y) -> f′(r1 * x)*x*f′(r2*y)*y,
+                 (x, y) -> r2 * f′(r1*x)*f′(r2*y) + r1*r2*f′′(r1*x)*x*f′(r2*y),
+                 (x, y) -> r1 * f′(r1*x)*f′(r2*y) + r1*r2*f′(r1*x)*y*f′′(r2*y),
+                 (x, y) -> r1^2 * r2^2 * f′′(r1*x) * f′′(r2*y)
+                )
+        mvnex(funcs, u)
+    end
 end
 function d2gdru(::Val{relu}, r1, r2, u)
     0, # 11
