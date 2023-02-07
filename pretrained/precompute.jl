@@ -2,10 +2,10 @@ using MLPGradientFlow
 using Distributed, Serialization
 
 function generate_input(; rgrid = [10.0.^(-6:.5:-1); .2:.1:3; 4:10],
-        ugrid = (x -> vcat(x, -reverse(x)))([-.999; -.99; -.9; range(-.89, -.01, 22)]))
+        ugrid = (x -> vcat(x, -reverse(x)))([10.0.^(-6:-2) .- 1; -.95; -.9; range(-.85, -.01, 22)]))
     collect(Iterators.product(rgrid, rgrid, ugrid))
 end
-function compute_numerical_integrals(inp, g, activation; tol = 1e-14)
+function compute_numerical_integrals(inp, g, activation; tol = 1e-16)
     MLPGradientFlow.TOL.atol[] = tol; MLPGradientFlow.TOL.rtol[] = tol;
     y = @distributed vcat for x in inp
         (x, g(activation, x...))
