@@ -1,10 +1,10 @@
 [approximators]
-git-tree-sha1 = "7aa0bb0d1c8e415814abbb603bb8e335ef5989aa"
+git-tree-sha1 = "1e3343a7fbd0f6ebe937737dddb2ce7a6be5543c"
 lazy = true
 
     [[approximators.download]]
-    sha256 = "322bd708f75f2e38db58e07c458c8b20122b3122e7c48fc6723a0226e8927b78"
+    sha256 = "bf175c7376e7348aba14d36e5ad38c69b5cd65e8358f68999dc25a77bc55a313"
     url = "https://github.com/jbrea/MLPGradientFlow.jl/releases/download/approximators/approximators.tar.gz"
     [[approximators.download]]
-    sha256 = "322bd708f75f2e38db58e07c458c8b20122b3122e7c48fc6723a0226e8927b78"
+    sha256 = "bf175c7376e7348aba14d36e5ad38c69b5cd65e8358f68999dc25a77bc55a313"
     url = "https://lcnwww.epfl.ch/bio322/approximators.tar.gz"

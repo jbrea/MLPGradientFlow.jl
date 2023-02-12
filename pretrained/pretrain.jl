@@ -2,7 +2,7 @@ using Distributed
 addprocs(30, exeflags="--project=$(joinpath(@__DIR__, ".."))")
 @everywhere begin
 using MLPGradientFlow, Serialization, Optim, OrdinaryDiffEq
-import MLPGradientFlow: g3, dgdru, d2gdru, tanh, sigmoid, g, gelu, softplus
+import MLPGradientFlow: g3, dgdru, d2gdru, tanh, sigmoid, g, gelu, softplus, pickle, params
 
 function load_integrals(g, activation)
     data = deserialize("numerical_integrals2-$g-$activation.dat")
@@ -25,27 +25,29 @@ conditions = collect(Iterators.product((g3, dgdru, d2gdru),
                                        (g, tanh, sigmoid, gelu, softplus),
                                        (96,)))
 
-onetraining = ARGS[1] == "1"
 @sync @distributed for (func, activation, r) in conditions
-    @show func activation r onetraining
+    @show func activation r
     data = load_integrals(func, activation)
     n, p, s1, s2 = create_net(data, r)
     pickle("standardizers-$func-$activation-$r.pt", Dict("s1m" => s1.m,
                                                          "s1s" => s1.s,
                                                          "s2m" => s2.m,
                                                          "s2s" => s2.s))
-    res = train(n, p,
-                maxiterations_ode = 0,
-                optim_solver = BFGS(),
-                maxiterations_optim = 10^8,
-                maxtime_optim = 24*3600)
-    serialize("res1-$func-$activation-$r.dat", res)
-    res = train(n, params(res["x"]),
-                maxiterations_ode = 0,
-                optim_solver = BFGS(),
-                maxiterations_optim = 10^8,
-                loss_scale = 1/(2*res["loss"]),
-                maxtime_optim = 2*24*3600)
-    serialize("res2-$func-$activation-$r.dat", res)
-    pickle("params-$func-$activation-$r.pt", res["x"])
+    for day in 1:4
+        if day > 1
+            res = deserialize("res$(day-1)-$func-$activation-$r.dat")
+            p = params(res["x"])
+        end
+        res = train(n, p,
+                    maxiterations_ode = 0,
+                    optim_solver = BFGS(),
+                    loss_scale = day == 1 ? 1. : 1/sqrt(res["loss"]),
+                    progress_interval = 120,
+                    maxiterations_optim = 10^8,
+                    maxtime_optim = 24*3600)
+        serialize("res$day-$func-$activation-$r.dat", res)
+        if day == 4
+            pickle("params-$func-$activation-$r.pt", res["x"])
+        end
+    end
 end
