@@ -578,7 +578,9 @@ Compute the gradient of `net` at parameter value `x`.
 """
 function gradient(net::Net, x; kwargs...)
     checkparams(net, x)
-    gradient!(zero(x), net, x; kwargs...)
+    dx = zero(x)
+    gradient!(dx, net, x; kwargs...)
+    dx ./= size(net.input, 2)
 end
 
 function forward_g!(g, prev, layers, x, offset = StaticInt(0);
@@ -825,7 +827,7 @@ Compute hessian of `net` at parameter value `x`.
 function hessian(net::Net, x; kwargs...)
     checkparams(net, x)
     H = Hessian(x)
-    hessian!(H, net, x; kwargs...)
+    hessian!(H, net, x; kwargs...) ./ size(net.input, 2)
 end
 """
     hessian_spectrum(net, x)
@@ -1401,6 +1403,8 @@ function glorot(rng::AbstractRNG, dims, T = Float64;
     params([(distr_fn(rng, dims[i], dims[i+1], T), biases[i])
             for i in 1:length(biases)]...)
 end
+append_bias!(w::AbstractArray) = append_bias!(w, nothing)
+append_bias!(w::Tuple) = append_bias!(w...)
 append_bias!(w, ::Nothing) = copy(w)
 append_bias!(w, b::AbstractVector) = hcat(w, b)
 append_bias!(w, is_bias::Bool) = append_bias!(w, is_bias ? zeros(eltype(w), size(w, 1)) : nothing)
@@ -1410,8 +1414,8 @@ append_bias!(w, is_bias::Bool) = append_bias!(w, is_bias ? zeros(eltype(w), size
 Where `wᵢ` is a weight matrix and `bᵢ` is a bias vector or `nothing` (`None` in python).
 """
 function params(layers...)
-    ComponentArray(; [Symbol(:w, i) => append_bias!(w, b)
-                      for (i, (w, b)) in enumerate(layers)]...)
+    ComponentArray(; [Symbol(:w, i) => append_bias!(w)
+                      for (i, w) in pairs(layers)]...)
 end
 function params(layers::AbstractDict)
     ComponentArray(; [Symbol(k) => Array(v) for (k, v) in layers]...)
