@@ -9,7 +9,7 @@ using NLopt
 export Net, NetI, Adam, Descent, FullBatch, MiniBatch, ScheduledMiniBatch
 export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict
 export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2
-export load_potential_approximator, picke, unpickle
+export load_potential_approximator, pickle, unpickle
 
 ###
 ### Activation Functions
@@ -506,9 +506,9 @@ function backprop!(layers, target, x;
 end
 function _backprop!(pdelta, pa′, delta, w; batch = indices(pdelta, static(2)))
     L = ArrayInterface.size(delta, StaticInt(1))
-    @tturbo for k in indices(pdelta, 1), i in batch
+    for k in indices(pdelta, 1), i in batch
         deltaki = zero(eltype(pdelta))
-        for l in 1:L
+        @tturbo for l in 1:L
             deltaki += delta[l, i] * w[l, k]
         end
         pdelta[k, i] = deltaki * pa′[k, i]
@@ -516,9 +516,9 @@ function _backprop!(pdelta, pa′, delta, w; batch = indices(pdelta, static(2)))
 end
 function _backprop!(pdelta, pa′, pdelta′, pa′′, delta, w; batch = indices(pdelta, static(2)))
     L = ArrayInterface.size(delta, StaticInt(1))
-    @tturbo for k in indices(pdelta, 1), i in batch
+    for k in indices(pdelta, 1), i in batch
         deltaki = zero(eltype(pdelta))
-        for l in 1:L
+        @tturbo for l in 1:L
             deltaki += delta[l, i] * w[l, k]
         end
         pdelta[k, i] = deltaki * pa′[k, i]
@@ -1107,6 +1107,7 @@ function train(net::Net, p;
     checkparams(net, p)
     dx = gradient(net, p, scale = loss_scale)
     gnorminf = maximum(abs, dx)
+    @show gnorminf
     if gnorminf > 5e2
         loss_scale = 1/(gnorminf/loss_scale/5e2)
         verbosity > 0 && @info "Large gradients encountered. Setting `loss_scale` to $loss_scale."

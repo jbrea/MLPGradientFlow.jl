@@ -8,12 +8,15 @@ include(joinpath(@__DIR__, "helper.jl"))
 
 using Optim, OrdinaryDiffEq
 
-
+# TODO: make this even stricter; ideas
+# - look at slope of loss curve and it's fluctuations
+# - look at changes in x (momentum?)
 function converge_to_fixed_point(net, x;
                                  max_iters = 30, maxiterations_per_iter = 10^5,
                                  maxtime_per_iter = 120,
                                  minimal_abs_drop = 0,
                                  minimal_rel_drop = 0,
+                                 patience = 2,
                                  convergence_solver = length(x) < 10^3 ? Newton() : BFGS(),
                                  rescale = isa(convergence_solver, BFGS),
                                  kwargs...)
@@ -32,7 +35,9 @@ function converge_to_fixed_point(net, x;
         res2 = train(net, init; kwa...)
         latest_drop = oldl - res2["loss"]
         push!(drops, latest_drop)
-        if latest_drop ≤ minimal_abs_drop || latest_drop/res2["loss"] ≤ minimal_rel_drop
+        latest_drops = sum(drops[end-patience:end])
+        if latest_drops ≤ minimal_abs_drop ||
+           latest_drops/res2["loss"] ≤ minimal_rel_drop
             success_iter = iter
             break
         end
@@ -50,8 +55,8 @@ settings = collect(Iterators.product(1:30, (2, 4, 8), (1, 2, 4)))
     net, x, xt = setup(seed = seed, Din = k, k = k, r = k*ρ, f = activation_function)
     res = converge_to_fixed_point(net, x,
                                   maxtime_per_iter = 2*3600,
-                                  maxtime_ode = 2*3600,
-                                  maxtime_optim = 2*3600,
+                                  maxtime_ode = 3*3600,
+                                  maxtime_optim = 3*3600,
                                   maxiterations_per_iter = 10^4,
                                   maxiterations_ode = 10^4,
                                   maxiterations_optim = 10^4,

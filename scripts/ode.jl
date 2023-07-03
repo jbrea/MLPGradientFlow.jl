@@ -38,9 +38,11 @@ function run_trajectory_comparison(algs, id;
     net, x, = setup(; seed, kwargs...)
     ref = train(net, x, alg = ref_alg, maxtime_ode = 1.2*maxtime,
                 maxiterations_optim = 0,
+                loss_scale = 1.,
                 n_samples_trajectory = 10^6, exclude = ["loss_curve"])
     res = [train(net, x; alg,
                        maxtime_ode = maxtime,
+                       loss_scale = 1.,
                        maxiterations_optim = 0,
                        n_samples_trajectory = 10^3)
            for (_, alg) in algs]
@@ -53,9 +55,13 @@ function run_trajectory_comparison(algs, id;
               id = id, seed = seed)
 end
 
+# TODO: QNDF, FBDF and TRBDF2
 methods() = Dict("KenCarp58" => KenCarp58(),
                  "RK4" => RK4(),
                  "CVODE" => CVODE_BDF(linear_solver=:GMRES),
+#                  "FBDF" => FBDF(autodiff = false),
+#                  "QNDF" => QNDF(autodiff = false),
+                 "TRBDF2" => TRBDF2(autodiff = false),
                  "Rodas5" => Rodas5(autodiff = false),
                  "Descent001" => Descent(1e-3),
                  "Descent01" => Descent(.01),
@@ -68,7 +74,7 @@ run_trajectory_comparison(methods(), "small", seed = 1, maxtime = 1)
 results_small = vcat([run_trajectory_comparison(methods(), "small",
                                                 seed = i,
                                                 ref_alg = Rodas5(autodiff = false))
-                      for i in 101:110]...)
+                      for i in 111:120]...)
 serialize("ode_results_small.dat", results_small)
 
 # warmup
@@ -88,7 +94,7 @@ function plot(results; y, ylabel, title = "")
            xlabel = "distance to reference \$d_m\$",
            ylabel = ylabel,
            title = title,
-           legend_to_label = "ode_legend_$y",
+#            legend_to_label = "ode_legend_$y",
            legend_columns = 1,
            legend_pos = "outer north east",
            legend_style = {draw = "none"},
@@ -107,6 +113,9 @@ function plot(results; y, ylabel, title = "")
                  Descent001 = {mark = "square*", color = colors[2]},
                  Adam001 = {mark = "*", color = colors[1]},
                  Adam0001 = {mark = "square*", color = colors[1]},
+                 TRBDF2 = {mark = "square", color = colors[5]},
+                 QNDF = {mark = "o", color = colors[5]},
+                 FBDF = {mark = "o", color = colors[4]}
                 }
                },
                Table({x = "dist", y = y, meta = "method"},
@@ -114,7 +123,8 @@ function plot(results; y, ylabel, title = "")
               ),
           Legend(["Rodas5", "KenCarp58", "RK4", "CVODE\\_BDF",
                   "Descent(0.01)", "Descent(0.001)",
-                  "Adam(0.001)", "Adam(0.0001)"])
+                  "Adam(0.001)", "Adam(0.0001)",
+                  "TRBDF2", "QNDF", "FBDF"])
          )
 end
 
