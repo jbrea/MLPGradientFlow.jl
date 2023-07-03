@@ -35,11 +35,13 @@ function converge_to_fixed_point(net, x;
         res2 = train(net, init; kwa...)
         latest_drop = oldl - res2["loss"]
         push!(drops, latest_drop)
-        latest_drops = sum(drops[end-patience:end])
-        if latest_drops ≤ minimal_abs_drop ||
-           latest_drops/res2["loss"] ≤ minimal_rel_drop
-            success_iter = iter
-            break
+        if length(drops) > patience
+            latest_drops = sum(drops[end-patience:end])
+            if latest_drops ≤ minimal_abs_drop ||
+               latest_drops/res2["loss"] ≤ minimal_rel_drop
+                success_iter = iter
+                break
+            end
         end
         oldl = res2["loss"]
         init = params(res2["x"])

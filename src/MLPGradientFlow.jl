@@ -974,8 +974,9 @@ function optim_solver_default(x)
     return LBFGS()
 end
 function alg_default(x)
-    length(x) ≤ 1024 && return KenCarp58()
-    return RK4()
+    return TRBDF2(autodiff = false)
+#     length(x) ≤ 1024 && return KenCarp58()
+#     return RK4()
 end
 function default_hessian_template(p, maxiterations_ode, alg,
                                   maxiterations_optim, optim_solver)
