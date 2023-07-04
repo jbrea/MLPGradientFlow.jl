@@ -66,7 +66,7 @@ settings = collect(Iterators.product(1:50, (2, 4), (1, 3//2, 2, 3)))
                                   maxnorm = 5*10^3,
                                   g_tol = 1e-16,
                                  )
-    serialize("fp2-$activation_function-$seed-$k-$ρ.dat", (; seed, k, ρ, res, xt))
+    serialize("fp3-$activation_function-$seed-$k-$ρ.dat", (; seed, k, ρ, res, xt))
 end
 
 function getnorms(net, x)
