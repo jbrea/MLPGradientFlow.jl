@@ -974,9 +974,8 @@ function optim_solver_default(x)
     return LBFGS()
 end
 function alg_default(x)
+    length(x) ≤ 1024 && return KenCarp58()
     return TRBDF2(autodiff = false)
-#     length(x) ≤ 1024 && return KenCarp58()
-#     return RK4()
 end
 function default_hessian_template(p, maxiterations_ode, alg,
                                   maxiterations_optim, optim_solver)
@@ -989,6 +988,7 @@ function default_hessian_template(p, maxiterations_ode, alg,
         nothing
     end
 end
+weightnorm(x) = sum(abs2, x)/(2*length(x))
 function get_functions(net, maxnorm;
                        hessian_template = nothing,
                        scale = one(eltype(net.input)),
@@ -998,7 +998,7 @@ function get_functions(net, maxnorm;
                        progress_interval = 20,
                        show_progress = false)
     f!, g!, h! = let net = net, c = maxnorm, t0 = time(), i = 0, batcher = batcher
-        (function(x; nx = sum(abs2, x)/2, derivs = 0)
+        (function(x; nx = weightnorm(x), derivs = 0)
              l = _loss(net, x; batch = batcher(),
                        losstype = isa(net, NetI) ? :mse : net.layers[end].f == softmax ? :crossentropy : :se,
                        derivs, scale, verbosity)
@@ -1008,7 +1008,7 @@ function get_functions(net, maxnorm;
                  l
              end
           end,
-          function(dx, x; nx = sum(abs2, x)/2, derivs = 1, kwargs...)
+          function(dx, x; nx = weightnorm(x), derivs = 1, kwargs...)
               step!(batcher)
               gradient!(dx, net, x; batch = batcher(), scale, derivs, kwargs...)
              if show_progress
@@ -1023,7 +1023,7 @@ function get_functions(net, maxnorm;
                  dx .+= (nx - c)*x
              end
           end,
-          function(H, x; nx = sum(abs2, x)/2, kwargs...)
+          function(H, x; nx = weightnorm(x), kwargs...)
               hessian!(Hessian(hessian_template, H), net, x;
                        batch = batcher(), scale, kwargs...)
              if nx > c
@@ -1033,7 +1033,7 @@ function get_functions(net, maxnorm;
          )
     end
     fgh! = function(F, G, H, x)
-              nx = sum(abs2, x)/2
+              nx = weightnorm(x)
               derivs = min(2, (G !== nothing) + 2*(H !== nothing))
               value = f!(x; nx, derivs)
               backprop = true
@@ -1046,7 +1046,7 @@ function get_functions(net, maxnorm;
               nothing
           end
     fg! = function(x, G)
-              nx = sum(abs2, x)/2
+              nx = weightnorm(x)
               value = f!(x; nx, derivs = 1)
               if length(G) > 0
                   g!(G, x; nx, forward = false)

@@ -12,8 +12,9 @@ using Optim, OrdinaryDiffEq
 # - look at slope of loss curve and it's fluctuations
 # - look at changes in x (momentum?)
 function converge_to_fixed_point(net, x;
-                                 max_iters = 30, maxiterations_per_iter = 10^5,
-                                 maxtime_per_iter = 120,
+                                 max_iters = 10,
+                                 maxiterations_per_iter = 10^5,
+                                 maxtime_per_iter = 5*60,
                                  minimal_abs_drop = 0,
                                  minimal_rel_drop = 0,
                                  patience = 2,
@@ -50,15 +51,15 @@ function converge_to_fixed_point(net, x;
 end
 end
 
-settings = collect(Iterators.product(1:30, (2, 4, 8), (1, 2, 4)))
+settings = collect(Iterators.product(1:50, (2, 4), (1, 3//2, 2, 3)))
 
 @sync @distributed for (seed, k, ρ) in settings
     @show seed k ρ
     net, x, xt = setup(seed = seed, Din = k, k = k, r = k*ρ, f = activation_function)
     res = converge_to_fixed_point(net, x,
-                                  maxtime_per_iter = 2*3600,
-                                  maxtime_ode = 3*3600,
-                                  maxtime_optim = 3*3600,
+                                  maxtime_per_iter = 3600,
+                                  maxtime_ode = 4*3600,
+                                  maxtime_optim = 5*3600,
                                   maxiterations_per_iter = 10^4,
                                   maxiterations_ode = 10^4,
                                   maxiterations_optim = 10^4,
@@ -99,8 +100,8 @@ df = DataFrame(seed = Int[], k = String[], ρ = String[],
                res = [], res2 = [],
               )
 for (seed, k, ρ) in settings
-    for activation in (g, softplus)
-        f = "fp2-$activation-$seed-$k-$ρ.dat"
+    for activation in (g,)
+        f = "simsjuly23/fp2-$activation-$seed-$k-$ρ.dat"
         isfile(f) || continue
         net, x, xt = setup(seed = seed, Din = k, k = k, r = k*ρ, f = activation)
         _, _, _, res, _ = deserialize(f)
@@ -126,12 +127,127 @@ for (seed, k, ρ) in settings
                    res[1], res[2]])
     end
 end
+function paramnorm(res)
+    x = params(res["x"])
+    sum(abs2, x)/2
+end
+import MLPGradientFlow: pairwise, similarity
+import LinearAlgebra: I
+function largest_pairwise_sim(res)
+    w1 = params(res["x"]).w1
+    maximum(pairwise(similarity, w1) - I)
+end
+function smallest_pairwise_dist(res)
+    w1 = params(res["x"]).w1
+    minimum(pairwise((x, y) -> sum(abs2, x - y)/length(x), w1) + 100I)
+end
 df.mineigvalsclass = (x -> x < -1e-8 ? 1 :
                       x < 0 ? 2 :
                       x < 1e-8 ? 3 : 4).(df.mineigval)
 minimum(df.mineigval) > -1e-8
 df.nparams = (x -> length(params(x["x"]))).(df.res2)
 df.kind = (((x, y),) -> "$x-$y").(zip(df.k, df.ρ))
+df.xnorm = paramnorm.(df.res2)
+df.largest_pairwise_sim = largest_pairwise_sim.(df.res2)
+df.sm_pairwise_sim = 1 .- df.largest_pairwise_sim
+df.smallest_pairwise_dist = smallest_pairwise_dist.(df.res2)
+df.on_saddle = df.largest_pairwise_sim .≈ 1
+df.infty = df.xnorm .> 4800;
+df.wtf = df.on_saddle
+
+@pgf Axis({xmode = "log", ymode = "log", xlabel = "loss", ylabel = "xnorm"},
+          Plot({"scatter",
+        "only marks",
+        "scatter src" = "explicit symbolic",
+        "scatter/classes" =
+        {
+         "1" = {mark = "*", opacity = .8, color = colors[1]},
+         "2" = {mark = "*", opacity = .8, color = colors[2]},
+         "3" = {mark = "*", opacity = .8, color = colors[4]},
+         "4" = {mark = "*", opacity = .8, color = colors[5]},
+        }
+   },
+       Table({x = "loss", y = "xnorm", meta = "mineigvalsclass"},
+             df[randperm(nrow(df)), ["loss", "xnorm", "mineigvalsclass"]]
+            )
+      ))
+
+@pgf Axis({xmode = "log", xlabel = "loss", ylabel = "sim"},
+          Plot({"scatter",
+                "only marks"},
+               Table({x = "loss", y = "largest_pairwise_sim"},
+                     df[df.infty, ["loss", "largest_pairwise_sim"]])
+              )
+         )
+
+@pgf Axis({xmode = "log", ymode = "log", xlabel = "loss", ylabel = "xnorm"},
+          Plot({"scatter",
+        "only marks",
+        "scatter src" = "explicit symbolic",
+        "scatter/classes" =
+        {
+         "0" = {mark = "*", opacity = .8, color = colors[1]},
+         "1" = {mark = "*", opacity = .8, color = colors[4]},
+        }
+   },
+       Table({x = "loss", y = "xnorm", meta = "on_saddle"},
+             df[randperm(nrow(df)), ["loss", "xnorm", "on_saddle"]]
+            )
+      ))
+
+@pgf Axis({xmode = "log", ymode = "log", xlabel = "loss", ylabel = "gradnorm"},
+          Plot({"scatter",
+        "only marks",
+        "scatter src" = "explicit symbolic",
+        "scatter/classes" =
+        {
+         "0" = {mark = "*", opacity = .8, color = colors[1]},
+         "1" = {mark = "*", opacity = .8, color = colors[4]},
+        }
+   },
+       Table({x = "loss", y = "gnorminf_reg", meta = "infty"},
+             df[randperm(nrow(df)), ["loss", "gnorminf_reg", "infty"]]
+            )
+      ),
+              Plot({
+                    "only marks",
+                    mark = "x",
+                    mark_options={black, scale=1.5}
+               },
+                   Table({x = "loss", y = "gnorminf_reg"},
+                         df[df.success_iter .== 0, ["loss", "gnorminf_reg"]]
+                        )
+                  ),
+         )
+
+@pgf Axis({xmode = "log", ymode = "log", xlabel = "smallest pairwise dist", ylabel = "sm pairwise sim"},
+          Plot({"scatter",
+        "only marks",
+        "scatter src" = "explicit symbolic",
+        "scatter/classes" =
+        {
+         "2" = {mark = "*", opacity = .8, color = colors[1]},
+         "4" = {mark = "*", opacity = .8, color = colors[3]},
+         "8" = {mark = "*", opacity = .8, color = colors[5]},
+        }
+   },
+       Table({x = "smallest_pairwise_dist", y = "sm_pairwise_sim", meta = "k"},
+             df[randperm(nrow(df)), ["smallest_pairwise_dist", "sm_pairwise_sim", "k"]]
+            )
+      ),
+              Plot({
+                    "only marks",
+                    mark = "x",
+                    mark_options={black, scale=1.5}
+               },
+                   Table({x = "smallest_pairwise_dist", y = "sm_pairwise_sim"},
+                         df[df.success_iter .== 0, ["smallest_pairwise_dist", "sm_pairwise_sim"]]
+                        )
+                  ),
+         )
+
+
+
 
 globalminexample = df[(df.seed .== 3) .& (df.k .== "4") .& (df.activation_function .== "softplus") .& (df.ρ .== "4"), :]
 globalminexample2 = df[(df.seed .== 15) .& (df.k .== "4") .& (df.activation_function .== "softplus") .& (df.ρ .== "4"), :]
@@ -143,7 +259,7 @@ f = @pgf Axis({xmode = "log",
                xlabel = "mean squared error",
                ylabel = raw"$\|\nabla L\|_\infty$",
                title = "",
-               ymax = 1e-4, ymin = 5e-18,
+#                ymax = 1e-4, ymin = 5e-19,
                legend_pos = "outer north east",
                font = "\\footnotesize"
               },
@@ -188,7 +304,7 @@ f2 = @pgf Axis({xmode = "log",
                ylabel = raw"$\|\nabla L\|_\infty$",
                title = "",
                set_layers, mark_layer = "axis tick labels",
-               ymax = 1e-4, ymin = 5e-18,
+#                ymax = 1e-4, ymin = 5e-18,
                legend_pos = "outer north east",
                font = "\\footnotesize"
               },
@@ -221,9 +337,9 @@ f2 = @pgf Axis({xmode = "log",
                          df[df.success_iter .== 0, ["loss", "gnorminf_reg"]]
                         )
                   ),
-              "\\node (globalstart) at (1e-25, 1e-10) {global?}; \\node[inner sep = 1] (globalend) at ($(globalminexample.loss[1]), $(globalminexample.gnorminf_reg[1])) {};\\draw[very thick, ->] (globalstart) -- (globalend);",
-              "\\node[inner sep = 1] (globalend) at ($(globalminexample2.loss[1]), $(globalminexample2.gnorminf_reg[1])) {};\\draw[very thick, ->] (globalstart) -- (globalend);",
-              "\\node (localstart) at (1e-18, 5e-8) {local}; \\node[inner sep = 0] (localend) at ($(localminexample.loss[1]), $(localminexample.gnorminf_reg[1])) {};\\draw[very thick, ->, shorten >= -1pt] (localstart) -- (localend);",
+#               "\\node (globalstart) at (1e-25, 1e-10) {global?}; \\node[inner sep = 1] (globalend) at ($(globalminexample.loss[1]), $(globalminexample.gnorminf_reg[1])) {};\\draw[very thick, ->] (globalstart) -- (globalend);",
+#               "\\node[inner sep = 1] (globalend) at ($(globalminexample2.loss[1]), $(globalminexample2.gnorminf_reg[1])) {};\\draw[very thick, ->] (globalstart) -- (globalend);",
+#               "\\node (localstart) at (1e-18, 5e-8) {local}; \\node[inner sep = 0] (localend) at ($(localminexample.loss[1]), $(localminexample.gnorminf_reg[1])) {};\\draw[very thick, ->, shorten >= -1pt] (localstart) -- (localend);",
 #               HLine({dashed}, 1e-13),
               Legend([raw"$D^0 = D^{1*} = 2, D^1 = 2$",
                       raw"$D^0 = D^{1*} = 2, D^1 = 4$",
@@ -237,6 +353,8 @@ f2 = @pgf Axis({xmode = "log",
                       "not converged",
                      ])
              )
+
+pgfsave("fixed_point2b.pdf", f2)
 
 pgfsave("fixed_point2.tikz", f2)
 
