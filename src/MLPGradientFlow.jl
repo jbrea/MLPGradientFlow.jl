@@ -4,7 +4,7 @@ using ComponentArrays, LoopVectorization, OrdinaryDiffEq, ArrayInterface, Static
       Optim, IfElse, LinearAlgebra, Distributed, Dates, Printf, Pkg,
       OrderedCollections, SLEEFPirates, LazyArtifacts, Random,
       StrideArraysCore, Pickle, Cuba, HCubature, ForwardDiff, SpecialFunctions
-using NLopt
+using NLopt, Sundials
 
 export Net, NetI, Adam, Descent, FullBatch, MiniBatch, ScheduledMiniBatch
 export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict
@@ -1256,6 +1256,11 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                                   losstype)
             sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
                                    callback = termin)
+            if sol.t[end] == 0
+                fallbackalg = CVODE_BDF(linear_solver=:GMRES)
+                sol = solve(prob, fallbackalg; dense, save_everystep, abstol, reltol,
+                                       callback = termin)
+            end
             if sol.t[end] == maxT
                 @info "Reached maxT = $maxT."
             end
@@ -1266,7 +1271,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                 trajectory = [(t, copy(x .= sol(t)))
                               for t in max.(sol.t[1], min.(sol.t[end], 10.0.^range(log10(sol.t[1]+1), log10(sol.t[end]+1), n_samples_trajectory) .- 1))]
             end
-#             x .= sol[end]
+            x .= sol[end]
             ode_x = copy(x)
         end
     else

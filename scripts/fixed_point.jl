@@ -69,10 +69,12 @@ settings = collect(Iterators.product(1:50, (2, 4), (1, 3//2, 2, 3)))
     res = train(net, x,
                 maxtime_ode = 10*3600,
                 maxtime_optim = 10*3600,
+                maxiterations_ode = 10^9,
+                maxiterations_optim = 10^9,
                 maxnorm = 10^3,
                 g_tol = 1e-16,
                 patience = 10^4)
-    serialize("fp4-$activation_function-$seed-$k-$ρ.dat", (; seed, k, ρ, res, xt))
+    serialize("fp5-$activation_function-$seed-$k-$ρ.dat", (; seed, k, ρ, res, xt))
 end
 
 function getnorms(net, x)
@@ -107,30 +109,39 @@ df = DataFrame(seed = Int[], k = String[], ρ = String[],
               )
 for (seed, k, ρ) in settings
     for activation in (g,)
-        f = "simsjuly23/fp2-$activation-$seed-$k-$ρ.dat"
+#         f = "simsjuly23/fp3-$activation-$seed-$k-$ρ.dat"
+        f = "simsjuly23/fp4-$activation-$seed-$k-$ρ.dat"
         isfile(f) || continue
         net, x, xt = setup(seed = seed, Din = k, k = k, r = k*ρ, f = activation)
         _, _, _, res, _ = deserialize(f)
-        sol = params(res[2]["x"])
+        finalres = res
+        res1 = finalres
+#         finalres = res[2]
+#         res1 = res[1]
+        sol = params(finalres["x"])
         gnorm, gnorminf, gnorm_reg, gnorminf_reg = getnorms(net, sol)
-        ode_gnorm, ode_gnorminf, ode_gnorm_reg, ode_gnorminf_reg = getnorms(net, params(res[1]["ode_x"]))
+        ode_gnorm, ode_gnorminf, ode_gnorm_reg, ode_gnorminf_reg = getnorms(net, params(res1["ode_x"]))
         if isnan(sum(sol))
             mineigval = NaN
         else
             mineigval = first(first(hessian_spectrum(net, sol)))
         end
-        push!(df, [seed, "$k", "$ρ", res[3][1], res[3][2][end],
-                   res[1]["ode_loss"],
-                   res[2]["loss"],
-                   res[1]["loss"],
+        push!(df, [seed, "$k", "$ρ",
+                   0,
+                   0,
+#                    res[3][1],
+#                    res[3][2][end],
+                   res1["ode_loss"],
+                   finalres["loss"],
+                   res1["loss"],
                    ode_gnorminf_reg,
                    gnorminf_reg,
                    mineigval,
                    gnorm,
                    gnorm_reg,
-                   res[2]["gnorm"],
+                   finalres["gnorm"],
                    "$activation",
-                   res[1], res[2]])
+                   res1, finalres])
     end
 end
 function paramnorm(res)
@@ -160,6 +171,11 @@ df.smallest_pairwise_dist = smallest_pairwise_dist.(df.res2)
 df.on_saddle = df.largest_pairwise_sim .≈ 1
 df.infty = df.xnorm .> 4800;
 df.wtf = df.on_saddle
+
+dff = leftjoin(df, df2, on = [:seed, :k, :ρ], makeunique = true)
+dropmissing!(dff)
+
+minimum(dff.loss - dff.loss_1)
 
 @pgf Axis({xmode = "log", ymode = "log", xlabel = "loss", ylabel = "xnorm"},
           Plot({"scatter",
