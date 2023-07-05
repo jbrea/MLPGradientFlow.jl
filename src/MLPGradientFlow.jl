@@ -968,7 +968,7 @@ function terminator(o; maxtime = 20, maxiter = typemax(Int), losstype = :mse)
     DiscreteCallback(condition, terminate!)
 end
 function optim_solver_default(x)
-    length(x) ≤ 32 && return NewtonTrustRegion()
+    length(x) ≤ 32 && return Newton()
     length(x) ≤ 1024 && return :LD_SLSQP
     length(x) ≤ 10^6 && return BFGS()
     return LBFGS()
