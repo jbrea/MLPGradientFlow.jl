@@ -56,17 +56,23 @@ settings = collect(Iterators.product(1:50, (2, 4), (1, 3//2, 2, 3)))
 @sync @distributed for (seed, k, ρ) in settings
     @show seed k ρ
     net, x, xt = setup(seed = seed, Din = k, k = k, r = k*ρ, f = activation_function)
-    res = converge_to_fixed_point(net, x,
-                                  maxtime_per_iter = 3600,
-                                  maxtime_ode = 4*3600,
-                                  maxtime_optim = 5*3600,
-                                  maxiterations_per_iter = 10^4,
-                                  maxiterations_ode = 10^4,
-                                  maxiterations_optim = 10^4,
-                                  maxnorm = 5*10^3,
-                                  g_tol = 1e-16,
-                                 )
-    serialize("fp3-$activation_function-$seed-$k-$ρ.dat", (; seed, k, ρ, res, xt))
+#     res = converge_to_fixed_point(net, x,
+#                                   maxtime_per_iter = 3600,
+#                                   maxtime_ode = 4*3600,
+#                                   maxtime_optim = 5*3600,
+#                                   maxiterations_per_iter = 10^4,
+#                                   maxiterations_ode = 10^4,
+#                                   maxiterations_optim = 10^4,
+#                                   maxnorm = 5*10^3,
+#                                   g_tol = 1e-16,
+#                                  )
+    res = train(net, x,
+                maxtime_ode = 10*3600,
+                maxtime_optim = 10*3600,
+                maxnorm = 10^3,
+                g_tol = 1e-16,
+                patience = 10^4)
+    serialize("fp4-$activation_function-$seed-$k-$ρ.dat", (; seed, k, ρ, res, xt))
 end
 
 function getnorms(net, x)

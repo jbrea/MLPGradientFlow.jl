@@ -181,7 +181,10 @@ end
             input, target)
     x = params(θ...)
     f!, g!, h!, fgh!, fg! = get_functions(n, 70, hessian_template = Hessian(x))
-    r(x) = (sum(abs2, x)/2 > 70)*(sum(abs2, x)/2-70)^2/2
+    r = function(x)
+        nx = sum(abs2, x)/(2*length(x))
+        nx > 70 ? (nx-70)^2/2 : 0.
+    end
     @test f!(x) ≈ loss(n, x, losstype = :se)
     xl = 100x
     @test f!(xl) ≈ loss(n, xl, losstype = :se) + r(xl)

@@ -103,7 +103,7 @@ function second_deriv(f; multiargs = true)
 end
 
 @inline function A_mul_B!(a::AbstractMatrix{T}, f, w, input, batch) where T
-    K = ArrayInterface.size(input, StaticInt(1))
+    K = size(input, 1)
     @tturbo for m ∈ indices(w, 1), n ∈ batch
         amn = zero(T)
         for k ∈ 1:K
@@ -113,7 +113,7 @@ end
     end
 end
 @inline function A_mul_B!(a::AbstractMatrix{T}, a′, f, w, input, batch) where T
-    K = ArrayInterface.size(input, StaticInt(1))
+    K = size(input, 1)
     f′ = deriv(f)
     @tturbo for m ∈ indices(w, 1), n ∈ batch
         amn = zero(T)
@@ -126,7 +126,7 @@ end
     end
 end
 @inline function A_mul_B!(a::AbstractMatrix{T}, a′, a′′, f, w, input, batch) where T
-    K = ArrayInterface.size(input, StaticInt(1))
+    K = size(input, 1)
     f′ = deriv(f)
     f′′ = second_deriv(f)
     @tturbo for m ∈ indices(w, 1), n ∈ batch
@@ -150,7 +150,7 @@ end
 @inline A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(square), w, input, batch) where T =
     A_mul_B!(a, a′, square, w, input, batch)
 @inline function A_mul_B!(a::AbstractMatrix{T}, a′, ::typeof(g), w, input, batch) where T
-    K = ArrayInterface.size(input, StaticInt(1))
+    K = size(input, 1)
     @tturbo for m ∈ indices(w, 1), n ∈ batch
         amn = zero(T)
         for k ∈ 1:K
@@ -162,7 +162,7 @@ end
     end
 end
 @inline function A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(g), w, input, batch) where T
-    K = ArrayInterface.size(input, StaticInt(1))
+    K = size(input, 1)
     @tturbo for m ∈ indices(w, 1), n ∈ batch
         amn = zero(T)
         for k ∈ 1:K
@@ -181,8 +181,8 @@ A_mul_B!(a::AbstractMatrix{T}, ::typeof(softmax), w, input, batch) where T =
 A_mul_B!(a::AbstractMatrix{T}, a′, ::typeof(softmax), w, input, batch) where T =
     A_mul_B!(a, a′, nothing, softmax, w, input, batch)
 @inline function A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(softmax), w, input, batch) where T
-    K = ArrayInterface.size(input, StaticInt(1))
-    lastidx = ArrayInterface.size(a, StaticInt(1))
+    K = size(input, 1)
+    lastidx = size(a, 1)
     @tturbo for m ∈ indices(w, 1), n ∈ batch
         amn = zero(T)
         for k ∈ 1:K
@@ -505,7 +505,7 @@ function backprop!(layers, target, x;
     backprop!(layers, x; derivs, batch)
 end
 function _backprop!(pdelta, pa′, delta, w; batch = indices(pdelta, static(2)))
-    L = ArrayInterface.size(delta, StaticInt(1))
+    L = size(delta, 1)
     for k in indices(pdelta, 1), i in batch
         deltaki = zero(eltype(pdelta))
         @tturbo for l in 1:L
@@ -515,7 +515,7 @@ function _backprop!(pdelta, pa′, delta, w; batch = indices(pdelta, static(2)))
     end
 end
 function _backprop!(pdelta, pa′, pdelta′, pa′′, delta, w; batch = indices(pdelta, static(2)))
-    L = ArrayInterface.size(delta, StaticInt(1))
+    L = size(delta, 1)
     for k in indices(pdelta, 1), i in batch
         deltaki = zero(eltype(pdelta))
         @tturbo for l in 1:L
@@ -950,8 +950,7 @@ function swapsign(f!)
         end
     end
 end
-function terminator(; maxtime = 20, maxiter = typemax(Int),
-                      minloss = 0., losstype = :mse)
+function terminator(o; maxtime = 20, maxiter = typemax(Int), losstype = :mse)
     i = Ref(0)
     t0 = Ref(0.)
     condition = (u, t, integrator) -> begin
@@ -961,9 +960,10 @@ function terminator(; maxtime = 20, maxiter = typemax(Int),
                                  end
                                  i[] += 1
                                  Δ = time() - t0[]
-                                 return Δ > maxtime ||
-                                        i[] ≥ maxiter ||
-                                        (minloss > 0. && _loss(integrator.p.net, u; losstype, forward = false) < minloss)
+                                 return stop(o) ||
+                                        Δ > maxtime ||
+                                        i[] ≥ maxiter #||
+#                                         (minloss > 0. && _loss(integrator.p.net, u; losstype, forward = false) < minloss)
                              end
     DiscreteCallback(condition, terminate!)
 end
@@ -989,71 +989,118 @@ function default_hessian_template(p, maxiterations_ode, alg,
     end
 end
 weightnorm(x) = sum(abs2, x)/(2*length(x))
-function get_functions(net, maxnorm;
-                       hessian_template = nothing,
-                       scale = one(eltype(net.input)),
-                       verbosity = 1,
-                       losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
-                       batcher = FullBatch(net.input),
-                       progress_interval = 20,
-                       show_progress = false)
-    f!, g!, h! = let net = net, c = maxnorm, t0 = time(), i = 0, batcher = batcher
-        (function(x; nx = weightnorm(x), derivs = 0)
-             l = _loss(net, x; batch = batcher(),
-                       losstype = isa(net, NetI) ? :mse : net.layers[end].f == softmax ? :crossentropy : :se,
-                       derivs, scale, verbosity)
-             if nx > c
-                 l + (nx - c)^2/2
-             else
-                 l
-             end
-          end,
-          function(dx, x; nx = weightnorm(x), derivs = 1, kwargs...)
-              step!(batcher)
-              gradient!(dx, net, x; batch = batcher(), scale, derivs, kwargs...)
-             if show_progress
-                 i += 1
-                 if time() - t0 > progress_interval
-                    t0 = time()
-                    l = _loss(net, x; losstype, forward = false)
-                    @printf "%s: gradient evals: %6i, loss: %g\n" now() i l
-                end
-            end
-             if nx > c
-                 dx .+= (nx - c)*x
-             end
-          end,
-          function(H, x; nx = weightnorm(x), kwargs...)
-              hessian!(Hessian(hessian_template, H), net, x;
-                       batch = batcher(), scale, kwargs...)
-             if nx > c
-                 H .+= x * x' + I*(nx - c)
-             end
-          end
-         )
+Base.@kwdef mutable struct OptimizationState{T,N}
+    net::N
+    t0::Float64 = time()
+    fk::Int = 0
+    gk::Int = 0
+    hk::Int = 0
+    k_last_best::Int = 0
+    bestl::Float64 = Inf
+    bestx::T = random_params(net)
+    maxnorm::Float64 = Inf
+    scale::Float64 = 1.
+    verbosity::Int = 0
+    show_progress::Bool = true
+    hessian_template = nothing
+    progress_interval::Float64 = 5.
+    patience::Int = 10^4
+    losstype::Symbol = isa(net, NetI) ? :mse : net.layers[end].f == softmax ? :crossentropy : :se
+end
+function OptimizationState(net; maxnorm = Inf, scale = 1., progress_interval = 5., kwargs...)
+    OptimizationState(; net, maxnorm = float(maxnorm), scale = float(scale), progress_interval = float(progress_interval), kwargs...)
+end
+struct Loss{T,N}
+    o::OptimizationState{T,N}
+end
+function (l::Loss)(x; nx = weightnorm(x), forward = true, derivs = 0)
+    o = l.o
+    loss = _loss(o.net, x;
+                 losstype = o.losstype, forward,
+                 derivs, scale = o.scale, verbosity = o.verbosity)
+    o.fk += 1
+    if loss < o.bestl
+        o.k_last_best = o.fk
+        o.bestl = loss/o.scale
+        o.bestx .= x
     end
-    fgh! = function(F, G, H, x)
-              nx = weightnorm(x)
-              derivs = min(2, (G !== nothing) + 2*(H !== nothing))
-              value = f!(x; nx, derivs)
-              backprop = true
-              if G !== nothing
-                  g!(G, x; nx, forward = false, derivs)
-                  backprop = false
-              end
-              H === nothing || h!(H, x; nx, forward = false, backprop = backprop)
-              F === nothing || return value
-              nothing
-          end
-    fg! = function(x, G)
-              nx = weightnorm(x)
-              value = f!(x; nx, derivs = 1)
-              if length(G) > 0
-                  g!(G, x; nx, forward = false)
-              end
-              value
-          end
-    (f!, g!, h!, fgh!, fg!)
+    if nx > o.maxnorm
+        loss + (nx - o.maxnorm)^2/2
+    else
+        loss
+    end
+end
+struct Grad{T,N}
+    l::Loss{T,N}
+end
+function (g::Grad)(dx, x; nx = weightnorm(x), derivs = 1, forward = true, kwargs...)
+    o = g.l.o
+    gradient!(dx, o.net, x; scale = o.scale, derivs, forward, kwargs...)
+    if forward == true
+        g.l(x; nx, forward = false)
+    end
+    o.gk += 1
+    if o.show_progress
+        if time() - o.t0 > o.progress_interval
+            o.t0 = time()
+            @printf "%s: evals: (ℓ: %6i, ∇: %6i, ∇²: %6i), loss: %g\n" now() o.fk o.gk o.hk o.bestl
+        end
+    end
+    if nx > o.maxnorm
+        dx .+= (nx - o.maxnorm)*x/length(x)
+    end
+    dx
+end
+struct Hess{T,N}
+    g::Grad{T,N}
+end
+function (h::Hess)(H, x; nx = weightnorm(x), kwargs...)
+    o = h.g.l.o
+    hessian!(Hessian(o.hessian_template, H), o.net, x;
+             scale = o.scale, kwargs...)
+    o.hk += 1
+    if nx > o.maxnorm
+        H .+= x * x'/length(x)^2 + I*(nx - o.maxnorm)/length(x)
+    end
+end
+struct NLOptObj{T,N} <: Function
+    g::Grad{T,N}
+end
+stop(o) = o.fk - o.k_last_best > o.patience
+function (nl::NLOptObj)(x, G)
+    nx = weightnorm(x)
+    loss = nl.g.l(x; nx, derivs = 1)
+    if length(G) > 0
+        nl.g(G, x; nx, forward = false)
+    end
+    if stop(nl.g.l.o)
+        error()
+    end
+    loss
+end
+struct OptimObj{T,N}
+    h::Hess{T,N}
+end
+function (op::OptimObj)(F, G, H, x)
+    nx = weightnorm(x)
+    derivs = min(2, (G !== nothing) + 2*(H !== nothing))
+    loss = op.h.g.l(x; nx, derivs)
+    backprop = true
+    if G !== nothing
+        op.h.g(G, x; nx, forward = false, derivs)
+        backprop = false
+    end
+    H === nothing || op.h(H, x; nx, forward = false, backprop = backprop)
+    F === nothing || return loss
+    nothing
+end
+
+function get_functions(net, maxnorm; kwargs...)
+    o = OptimizationState(net; maxnorm, kwargs...)
+    l = Loss(o)
+    g = Grad(l)
+    h = Hess(g)
+    (l, g, h, OptimObj(h), NLOptObj(g))
 end
 """
     train(net, x0; kwargs...)
@@ -1095,7 +1142,7 @@ function train(net::Net, p;
                maxnorm = Inf,
                loss_scale = 1.,
                verbosity = 1,
-               batcher = FullBatch(),
+#                batcher = FullBatch(),
                losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
                show_progress = verbosity == 1,
                progress_interval = 5,
@@ -1103,12 +1150,15 @@ function train(net::Net, p;
                optim_solver = optim_solver_default(p),
                maxiterations_ode = 10^6,
                maxiterations_optim = 10^5,
+               patience = 10^4,
                hessian_template = default_hessian_template(p, maxiterations_ode, alg, maxiterations_optim, optim_solver),
                kwargs...)
     checkparams(net, p)
     dx = gradient(net, p, scale = loss_scale)
     gnorminf = maximum(abs, dx)
-    @show gnorminf
+    if verbosity > 0
+        @show gnorminf
+    end
     if gnorminf > 5e2
         loss_scale = 1/(gnorminf/loss_scale/5e2)
         verbosity > 0 && @info "Large gradients encountered. Setting `loss_scale` to $loss_scale."
@@ -1116,10 +1166,11 @@ function train(net::Net, p;
     _, g!, h!, fgh!, fg! = get_functions(net, maxnorm;
                                          hessian_template = hessian_template,
                                          scale = loss_scale,
+                                         patience,
                                          losstype,
-                                         batcher = isa(batcher, Function) ? batcher(net.input) : batcher,
+#                                          batcher = isa(batcher, Function) ? batcher(net.input) : batcher,
                                          show_progress,
-                                         progress_interval,
+                                         progress_interval = float(progress_interval),
                                          verbosity)
     lossfunc = u -> loss(net, u; losstype)
     train(net, lossfunc, g!, h!, fgh!, fg!, p;
@@ -1133,7 +1184,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                optim_solver = optim_solver_default(p),
                maxiterations_ode = 10^6,
                maxiterations_optim = 10^5,
-               g_tol = 1e-12,
+               g_tol = 1e-13,
                verbosity = 1,
                abstol = 1e-6,
                reltol = 1e-6,
@@ -1158,9 +1209,9 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                                                x_abstol = -eps(),
                                                x_reltol = -eps(),
                                                allow_f_increases = true,
-                                               callback = x -> x.value < minloss,
                                                g_abstol = g_tol,
                                                g_reltol = g_tol,
+                                               callback = _ -> stop(fgh!.h.g.l.o)
                                               )
     )
     x = copy(p)
@@ -1199,9 +1250,9 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
             odef = ODEFunction(swapsign(g!), jac = swapsign(h!))
             x0 = use_component_arrays ? x : Array(x)
             prob = ODEProblem(odef, x0, (0., Float64(maxT)), (; net,))
-            termin = terminator(; maxtime = maxtime_ode,
+            termin = terminator(g!.l.o; maxtime = maxtime_ode,
                                   maxiter = maxiterations_ode,
-                                  minloss = minloss,
+#                                   minloss = minloss,
                                   losstype)
             sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
                                    callback = termin)
@@ -1215,7 +1266,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                 trajectory = [(t, copy(x .= sol(t)))
                               for t in max.(sol.t[1], min.(sol.t[end], 10.0.^range(log10(sol.t[1]+1), log10(sol.t[end]+1), n_samples_trajectory) .- 1))]
             end
-            x .= sol[end]
+#             x .= sol[end]
             ode_x = copy(x)
         end
     else
@@ -1239,7 +1290,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
             _, xsol, ret = NLopt.optimize(opt, x)
             optim_time_run = time() - t0
             optim_iterations = opt.numevals
-            x .= xsol
+#             x .= xsol
             if verbosity > 0
                 println("NLopt returned with code $ret")
             end
@@ -1248,7 +1299,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
             res = Optim.optimize(Optim.only_fgh!(fgh!), x,
                                  optim_solver,
                                  optim_options)
-            x = res.minimizer
+#             x = res.minimizer
             optim_time_run = res.time_run
             optim_iterations = res.iterations
         end
@@ -1260,16 +1311,14 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
         optim_iterations = 0
         optim_time_run = 0
     end
+    x = g!.l.o.bestx
     gradient!(G, net, x) # recompute gradient
     N = isa(net, Net) ? size(net.input, 2) : 1.
     gnorm = maximum(abs, G) / N
     g!(G, x) # recompute with regularized loss
     gnorm_regularized = maximum(abs, G) / loss_scale / N
     loss = lossfunc(x)
-    if !isnothing(ode_loss) && loss > ode_loss
-        @warn "Loss after optimizer is larger than after ode by $(loss - ode_loss)."
-    end
-    rawres = (; ode = sol, optim = res, ode_x,
+    rawres = (; ode = sol, optim = res, ode_x, optim_state = g!.l.o,
               x, init = p, loss, ode_loss, gnorm, gnorm_regularized,
               ode_time_run, ode_iterations, net, optim_time_run,
               optim_iterations, trajectory, lossfunc, transpose_solution)
