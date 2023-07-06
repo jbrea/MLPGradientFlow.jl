@@ -6,13 +6,10 @@ import MLPGradientFlow: params
 import PGFPlotsX: Axis
 colors = ColorSchemes.Johnson
 
-function setup(; Din = 2, Nsamples = 10^4,
-                 seed = 123, rng = Xoshiro(seed),
-                 parameter_rng = rng,
-                 k = 4, r = 8, f = softplus, biases = true)
-    inp = randn(rng, Din, Nsamples)
+function random_teacher(; input, Nsamples, rng, parameter_rng, k, Din, biases, f, kwargs...)
     xt = ComponentArray(w1 = randn(parameter_rng, k, Din + biases),
                         w2 = randn(parameter_rng, 1, k + biases))
+    inp = input(; rng, Din, Nsamples)
     h = xt.w1[:, 1:Din] * inp
     if biases
         h .+= xt.w1[:, end]
@@ -21,6 +18,24 @@ function setup(; Din = 2, Nsamples = 10^4,
     if biases
         targ .+= xt.w2[:, end]
     end
+    inp, targ, xt
+end
+function aifeyman_11(; Nsamples, kwargs...)
+    inp = rand(3, Nsamples)*4 .+ 1
+    f = x -> begin
+        q1, epsilon, r = x
+        q1*r/(4*pi*epsilon*r^3)
+    end
+    inp, f.(eachcol(inp)), missing
+end
+standard_normal_input(; rng, Din, Nsamples, kwargs...) = randn(rng, Din, Nsamples)
+function setup(; Din = 2, Nsamples = 10^4,
+                 seed = 123, rng = Xoshiro(seed),
+                 parameter_rng = rng,
+                 teacher = random_teacher,
+                 input = standard_normal_input,
+                 k = 4, r = 8, f = softplus, biases = true)
+    inp, targ, xt = teacher(; input, Din, Nsamples, rng, parameter_rng, k, r, f, biases)
     net = Net(layers = ((r, f, biases), (1, identity, biases)),
               input = inp, target = targ, derivs = 2)
     x = random_params(parameter_rng, net)

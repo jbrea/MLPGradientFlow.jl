@@ -83,10 +83,10 @@ function getnorms(net, x)
     dx ./= N
     gnorm = sqrt(sum(abs2, dx))
     gnorminf = maximum(abs, dx)
-    nx = sum(abs2, x)/2
-    c = 5*10^3
+    nx = sum(abs2, x)/(2*length(x))
+    c = 10^3
     if nx > c
-        dx .+= (nx - c)*x/N
+        dx .+= (nx - c)*x/(N*length(x))
     end
     gnorm_reg = sqrt(sum(abs2, dx))
     gnorminf_reg = maximum(abs, dx)
@@ -110,7 +110,7 @@ df = DataFrame(seed = Int[], k = String[], ρ = String[],
 for (seed, k, ρ) in settings
     for activation in (g,)
 #         f = "simsjuly23/fp3-$activation-$seed-$k-$ρ.dat"
-        f = "simsjuly23/fp4-$activation-$seed-$k-$ρ.dat"
+        f = "simsjuly23/fp5-$activation-$seed-$k-$ρ.dat"
         isfile(f) || continue
         net, x, xt = setup(seed = seed, Din = k, k = k, r = k*ρ, f = activation)
         _, _, _, res, _ = deserialize(f)
@@ -172,10 +172,14 @@ df.on_saddle = df.largest_pairwise_sim .≈ 1
 df.infty = df.xnorm .> 4800;
 df.wtf = df.on_saddle
 
-dff = leftjoin(df, df2, on = [:seed, :k, :ρ], makeunique = true)
+dff = leftjoin(df, df1, on = [:seed, :k, :ρ], makeunique = true)
+dff = leftjoin(dff, df2, on = [:seed, :k, :ρ], makeunique = true)
 dropmissing!(dff)
 
-minimum(dff.loss - dff.loss_1)
+maximum(dff.loss - dff.loss_2)
+
+dff.dl = dff.loss - dff.loss_2
+sort!(dff, :dl)
 
 @pgf Axis({xmode = "log", ymode = "log", xlabel = "loss", ylabel = "xnorm"},
           Plot({"scatter",

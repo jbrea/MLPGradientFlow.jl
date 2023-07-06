@@ -705,7 +705,7 @@ weakdeps = ["ChainRulesCore", "ForwardDiff", "SpecialFunctions"]
     SpecialFunctionsExt = "SpecialFunctions"
 
 [[deps.MLPGradientFlow]]
-deps = ["ArrayInterface", "ComponentArrays", "Cuba", "Dates", "Distributed", "ForwardDiff", "HCubature", "IfElse", "LazyArtifacts", "LinearAlgebra", "LoopVectorization", "NLopt", "Optim", "OrderedCollections", "OrdinaryDiffEq", "Pickle", "Pkg", "Printf", "Random", "SLEEFPirates", "SpecialFunctions", "Static", "StrideArraysCore"]
+deps = ["ArrayInterface", "ComponentArrays", "Cuba", "Dates", "Distributed", "ForwardDiff", "HCubature", "IfElse", "LazyArtifacts", "LinearAlgebra", "LoopVectorization", "NLopt", "Optim", "OrderedCollections", "OrdinaryDiffEq", "Pickle", "Pkg", "Printf", "Random", "SLEEFPirates", "SpecialFunctions", "Static", "StrideArraysCore", "Sundials"]
 path = ".."
 uuid = "5710a1e5-60a8-4c70-afc1-f14619eff7f5"
 version = "0.2.0"

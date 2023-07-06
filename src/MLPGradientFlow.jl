@@ -960,7 +960,7 @@ function terminator(o; maxtime = 20, maxiter = typemax(Int), losstype = :mse)
                                  end
                                  i[] += 1
                                  Δ = time() - t0[]
-                                 return stop(o) ||
+                                 return converged(o) ||
                                         Δ > maxtime ||
                                         i[] ≥ maxiter #||
 #                                         (minloss > 0. && _loss(integrator.p.net, u; losstype, forward = false) < minloss)
@@ -1066,14 +1066,14 @@ end
 struct NLOptObj{T,N} <: Function
     g::Grad{T,N}
 end
-stop(o) = o.fk - o.k_last_best > o.patience
+converged(o) = o.fk - o.k_last_best > o.patience
 function (nl::NLOptObj)(x, G)
     nx = weightnorm(x)
     loss = nl.g.l(x; nx, derivs = 1)
     if length(G) > 0
         nl.g(G, x; nx, forward = false)
     end
-    if stop(nl.g.l.o)
+    if converged(nl.g.l.o)
         error()
     end
     loss
@@ -1211,12 +1211,13 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                                                allow_f_increases = true,
                                                g_abstol = g_tol,
                                                g_reltol = g_tol,
-                                               callback = _ -> stop(fgh!.h.g.l.o)
+                                               callback = _ -> converged(fgh!.h.g.l.o)
                                               )
     )
     x = copy(p)
     G = zero(x)
     trajectory = nothing
+    t0 = time()
     if maxiterations_ode > 0
         if verbosity > 0
             @info "Starting ODE solver $alg."
@@ -1282,6 +1283,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
         ode_x = nothing
     end
     if maxiterations_optim > 0
+        g!.l.o.k_last_best = g!.l.o.fk # reset patience
         if verbosity > 0
             @info "Starting optimizer $optim_solver."
         end
@@ -1326,6 +1328,8 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
     rawres = (; ode = sol, optim = res, ode_x, optim_state = g!.l.o,
               x, init = p, loss, ode_loss, gnorm, gnorm_regularized,
               ode_time_run, ode_iterations, net, optim_time_run,
+              converged = converged(g!.l.o),
+              total_time = time() - t0,
               optim_iterations, trajectory, lossfunc, transpose_solution)
     if result == :raw
         rawres
@@ -1382,6 +1386,8 @@ _extract(::Val{:init}, res) = params2dict(transpose_solution(res, res.init))
 _extract(::Val{:x}, res) = params2dict(transpose_solution(res, res.x))
 _extract(::Val{:ode_x}, res) = isnothing(res.ode_x) ? nothing : params2dict(transpose_solution(res, res.ode_x))
 _extract(::Val{:ode_time_run}, res) = res.ode_time_run
+_extract(::Val{:converged}, res) = res.converged
+_extract(::Val{:total_time}, res) = res.total_time
 _extract(::Val{:ode_iterations}, res) = res.ode_iterations
 _extract(::Val{:optim_time_run}, res) = res.optim_time_run
 _extract(::Val{:optim_iterations}, res) = res.optim_iterations
@@ -1407,7 +1413,7 @@ function result2dict(res;
                      exclude = String[],
                      include = nothing)
     if include === nothing
-        include = ["loss", "ode_loss", "gnorm", "gnorm_regularized", "init", "x", "ode_x", "ode_time_run", "ode_iterations", "optim_time_run", "optim_iterations", "input", "target", "layerspec", "trajectory", "loss_curve", "teacher"]
+        include = ["loss", "converged", "total_time", "ode_loss", "gnorm", "gnorm_regularized", "init", "x", "ode_x", "ode_time_run", "ode_iterations", "optim_time_run", "optim_iterations", "input", "target", "layerspec", "trajectory", "loss_curve", "teacher"]
     end
     filter(x -> !isnothing(last(x)),
            Dict(Pair(x, _extract(Val(Symbol(x)), res))
