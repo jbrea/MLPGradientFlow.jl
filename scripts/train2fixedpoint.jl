@@ -10,7 +10,7 @@ addprocs(48, exeflags="--project=$(joinpath(@__DIR__, "."))")
     include(joinpath(@__DIR__, "helper.jl"))
 end
 
-settings = collect(Iterators.product(1:50, (2, 4), (1, 3//2, 2, 3), (random_teacher, aifeynman_11)))
+settings = collect(Iterators.product(1:25, (2, 4), (1, 3//2, 2, 3), (random_teacher, aifeynman_11)))
 
 @sync @distributed for (seed, k, ρ, teacher) in settings
     @show seed k ρ teacher
