@@ -20,7 +20,7 @@ function random_teacher(; input, Nsamples, rng, parameter_rng, k, Din, biases, f
     end
     inp, targ, xt
 end
-function aifeyman_11(; Nsamples, kwargs...)
+function aifeynman_11(; Nsamples, kwargs...)
     inp = rand(3, Nsamples)*4 .+ 1
     f = x -> begin
         q1, epsilon, r = x
