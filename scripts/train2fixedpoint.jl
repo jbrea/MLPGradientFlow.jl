@@ -1,6 +1,5 @@
-using Distributed, Pkg
-Pkg.activate(joinpath(@__DIR__, "."))
-using MLPGradientFlow
+using Distributed
+include(joinpath(@__DIR__, "helper.jl"))
 
 const activation_function = length(ARGS) > 0 ? getproperty(MLPGradientFlow, Meta.parse(ARGS[1])) : g
 
