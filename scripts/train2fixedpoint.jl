@@ -2,7 +2,7 @@ using Distributed, Pkg
 Pkg.activate(joinpath(@__DIR__, "."))
 using MLPGradientFlow
 
-const activation_function = length(ARGS > 0) ? getproperty(MLPGradientFlow, Meta.parse(ARGS[1])) : g
+const activation_function = length(ARGS) > 0 ? getproperty(MLPGradientFlow, Meta.parse(ARGS[1])) : g
 
 addprocs(48, exeflags="--project=$(joinpath(@__DIR__, "."))")
 
