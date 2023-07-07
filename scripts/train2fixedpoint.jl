@@ -1,6 +1,6 @@
 using Distributed
 
-addprocs(2, exeflags="--project=$(joinpath(@__DIR__, "."))")
+addprocs(48, exeflags="--project=$(joinpath(@__DIR__, "."))")
 
 @everywhere begin
     include(joinpath(@__DIR__, "helper.jl"))
