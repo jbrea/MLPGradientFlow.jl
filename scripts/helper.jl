@@ -76,3 +76,13 @@ function perturbed_saddle(smallnet, localmin; i, μ, σ = 1e-2, kwargs...)
     alignment = eig.vectors[:, 1]' * eps
     return net, x, alignment
 end
+
+function netfromres(res)
+    lspec = map(x -> (x[1], eval(Meta.parse(x[2])), x[3]), res["layerspec"])
+    Net(layers = lspec,
+        bias_adapt_input = false,
+        input = res["input"],
+        target = res["target"],
+        derivs = 2),
+    params(res["init"])
+end

@@ -968,7 +968,7 @@ function terminator(o; maxtime = 20, maxiter = typemax(Int), losstype = :mse)
     DiscreteCallback(condition, terminate!)
 end
 function optim_solver_default(x)
-    length(x) ≤ 32 && return Newton()
+    length(x) ≤ 128 && return Newton()
     length(x) ≤ 1024 && return :LD_SLSQP
     length(x) ≤ 10^6 && return BFGS()
     return LBFGS()
@@ -1190,7 +1190,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                reltol = 1e-6,
                save_everystep = true,
                dense = save_everystep,
-               maxT = 1e10,
+               maxT = Inf,
                maxtime_ode = 3*60,
                maxtime_optim = 2*60,
                result = :dict,
@@ -1217,7 +1217,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
     x = copy(p)
     G = zero(x)
     trajectory = nothing
-    t0 = time()
+    tstart = time()
     if maxiterations_ode > 0
         if verbosity > 0
             @info "Starting ODE solver $alg."
@@ -1258,8 +1258,16 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
             sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
                                    callback = termin)
             if sol.t[end] == 0
+                println("starting ODE fallback.")
                 fallbackalg = CVODE_BDF(linear_solver=:GMRES)
-                sol = solve(prob, fallbackalg; dense, save_everystep, abstol, reltol,
+                probfallback = ODEProblem(odef, x0, (0., 1e-2), (; net,))
+                solfallback = solve(probfallback, fallbackalg;
+                                    dense, save_everystep, abstol, reltol,
+                                    callback = termin)
+                @show g!.l(solfallback[end])
+                prob = ODEProblem(odef, solfallback[end],
+                                  (0., Float64(maxT)), (; net,))
+                sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
                                        callback = termin)
             end
             if sol.t[end] == maxT
@@ -1294,14 +1302,26 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
             opt.maxeval = maxiterations_optim
             opt.stopval = minloss
             t0 = time()
-            _, xsol, ret = NLopt.optimize(opt, x)
+            _, xsol, res = NLopt.optimize(opt, x)
             optim_time_run = time() - t0
             optim_iterations = opt.numevals
 #             x .= xsol
             if verbosity > 0
-                println("NLopt returned with code $ret")
+                println("NLopt returned with code $res")
             end
-            res = nothing
+            optim_stopped_by = if converged(g!.l.o)
+                "patience"
+            elseif res == NLopt.MAXTIME_REACHED
+                "maxtime"
+            elseif res == NLopt.MAXEVAL_REACHED
+                "maxeval"
+            elseif res == NLopt.STOPVAL_REACHED
+                "minloss"
+            elseif res == NLopt.SUCCESS
+                "converged"
+            else
+                string(res)
+            end
         else # Optim
             res = Optim.optimize(Optim.only_fgh!(fgh!), x,
                                  optim_solver,
@@ -1309,6 +1329,25 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
 #             x = res.minimizer
             optim_time_run = res.time_run
             optim_iterations = res.iterations
+            optim_stopped_by = if converged(g!.l.o)
+                "patience"
+            elseif optim_time_run ≥ maxtime_optim
+                "maxtime"
+            elseif Optim.iteration_limit_reached(res)
+                "maxeval"
+            elseif Optim.f_converged(res)
+                "minloss"
+            elseif Optim.g_converged(res)
+                "mingradnorm"
+            elseif Optim.converged(res)
+                "converged"
+            elseif isa(res.ls_success, Bool) && !res.ls_success
+                "line search failed"
+            elseif Optim.f_increased(res) && !iteration_limit_reached(res)
+                "objective increased between iterations"
+            else
+                "unkown reason"
+            end
         end
         if !isnothing(trajectory) && save_everystep
             push!(trajectory, (trajectory[end][1] + 1, copy(x)))
@@ -1329,7 +1368,8 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
               x, init = p, loss, ode_loss, gnorm, gnorm_regularized,
               ode_time_run, ode_iterations, net, optim_time_run,
               converged = converged(g!.l.o),
-              total_time = time() - t0,
+              optim_stopped_by,
+              total_time = time() - tstart,
               optim_iterations, trajectory, lossfunc, transpose_solution)
     if result == :raw
         rawres
@@ -1397,6 +1437,7 @@ _extract(::Val{:teacher}, res) = isa(res.net, NetI) ? res.net.xt : nothing
 _extract(::Val{:layerspec}, res) = isa(res.net, Net) ? map(x -> (x[1], string(x[2]), x[3]), res.net.layerspec) : ((size(res.net.u, 1), isa(res.net.f, PotentialApproximator) ? res.net.f.f : res.net.f , false),)
 _extract(::Val{:trajectory}, res) = isnothing(res.trajectory) ? nothing : OrderedDict(t => params2dict(transpose_solution(res, u)) for (t, u) in res.trajectory)
 _extract(::Val{:loss_curve}, res) = isnothing(res.trajectory) ? nothing : [res.lossfunc(u) for (_, u) in res.trajectory]
+_extract(::Val{:optim_stopped_by}, res) = res.optim_stopped_by
 """
     params2dict(p)
 
@@ -1413,7 +1454,7 @@ function result2dict(res;
                      exclude = String[],
                      include = nothing)
     if include === nothing
-        include = ["loss", "converged", "total_time", "ode_loss", "gnorm", "gnorm_regularized", "init", "x", "ode_x", "ode_time_run", "ode_iterations", "optim_time_run", "optim_iterations", "input", "target", "layerspec", "trajectory", "loss_curve", "teacher"]
+        include = ["loss", "converged", "optim_stopped_by", "total_time", "ode_loss", "gnorm", "gnorm_regularized", "init", "x", "ode_x", "ode_time_run", "ode_iterations", "optim_time_run", "optim_iterations", "input", "target", "layerspec", "trajectory", "loss_curve", "teacher"]
     end
     filter(x -> !isnothing(last(x)),
            Dict(Pair(x, _extract(Val(Symbol(x)), res))
