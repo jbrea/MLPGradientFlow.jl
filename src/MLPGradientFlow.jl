@@ -960,8 +960,10 @@ function terminator(o; maxtime = 20, maxiter = typemax(Int), losstype = :mse)
                                  end
                                  i[] += 1
                                  Δ = time() - t0[]
+#                                  @show Δ t
                                  return converged(o) ||
                                         Δ > maxtime ||
+                                        t > 1e300 || # otherwise solver gets stuck and never calls again this function; for unknown reason
                                         i[] ≥ maxiter #||
 #                                         (minloss > 0. && _loss(integrator.p.net, u; losstype, forward = false) < minloss)
                              end
