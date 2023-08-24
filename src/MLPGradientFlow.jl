@@ -980,7 +980,7 @@ function alg_default(x)
     return TRBDF2(autodiff = false)
 end
 function default_hessian_template(p, maxiterations_ode, alg,
-                                  maxiterations_optim, optim_solver)
+                                  maxiterations_optim, optim_solver, verbosity)
     if needs_hessian(maxiterations_ode, alg, maxiterations_optim, optim_solver)
         if length(p) > 10^4 && verbosity > 0
             @warn "Computing Hessians for $(length(p)) parameters requires a lot of memory and time"
@@ -1153,7 +1153,7 @@ function train(net::Net, p;
                maxiterations_ode = 10^6,
                maxiterations_optim = 10^5,
                patience = 10^4,
-               hessian_template = default_hessian_template(p, maxiterations_ode, alg, maxiterations_optim, optim_solver),
+               hessian_template = default_hessian_template(p, maxiterations_ode, alg, maxiterations_optim, optim_solver, verbosity),
                kwargs...)
     checkparams(net, p)
     dx = gradient(net, p, scale = loss_scale)
