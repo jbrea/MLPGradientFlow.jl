@@ -970,7 +970,7 @@ function terminator(o; maxtime = 20, maxiter = typemax(Int), losstype = :mse)
     DiscreteCallback(condition, terminate!)
 end
 function optim_solver_default(x)
-    length(x) ≤ 128 && return Newton()
+    length(x) ≤ 128 && return Newton(linesearch = Optim.LineSearches.HagerZhang(linesearchmax = 200))
     length(x) ≤ 1024 && return :LD_SLSQP
     length(x) ≤ 10^6 && return BFGS()
     return LBFGS()
@@ -1006,7 +1006,7 @@ Base.@kwdef mutable struct OptimizationState{T,N}
     show_progress::Bool = true
     hessian_template = nothing
     progress_interval::Float64 = 5.
-    patience::Int = 10^4
+    patience::Int = 2*10^4
     losstype::Symbol = isa(net, NetI) ? :mse : net.layers[end].f == softmax ? :crossentropy : :se
 end
 function OptimizationState(net; maxnorm = Inf, scale = 1., progress_interval = 5., kwargs...)
