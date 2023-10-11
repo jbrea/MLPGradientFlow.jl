@@ -1292,6 +1292,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
         sol = nothing
         ode_x = nothing
     end
+    optim_stopped_by = nothing
     if maxiterations_optim > 0
         g!.l.o.k_last_best = g!.l.o.fk # reset patience
         if verbosity > 0
