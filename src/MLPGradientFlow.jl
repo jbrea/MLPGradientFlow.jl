@@ -1491,11 +1491,20 @@ function unpickle(filename)
     Pickle.Torch.THload(filename)
 end
 
+input_dim(net::Net) = size(net.input, 1) - first(net.layers).bias
 random_params(net; kwargs...) = random_params(Random.GLOBAL_RNG, net; kwargs...)
-function random_params(rng, net; distr_fn = glorot_normal)
-    glorot(rng, (size(net.input, 1) - first(net.layers).bias,
+function random_params(rng, net::Net; distr_fn = glorot_normal)
+    glorot(rng, (input_dim(net),
                  Int.(getproperty.(net.layers, :k))...), eltype(net.input),
            biases = getproperty.(net.layers, :bias); distr_fn)
+end
+function random_params(rng, net::NetI; distr_fn = glorot_normal, transpose = true)
+    w = glorot(rng, (input_dim(net), size(net.u, 1), 1), eltype(net.u))
+    if transpose
+        transpose_params(w)
+    else
+        w
+    end
 end
 glorot_normal(in, out, T = Float64) = glorot_normal(Random.GLOBAL_RNG, in, out, T)
 glorot_uniform(in, out, T = Float64) = glorot_uniform(Random.GLOBAL_RNG, in, out, T)

@@ -381,8 +381,9 @@ function NetI(x::AbstractVector{T1}, xt::AbstractVector{T2}, f;
           loss_xt
          )
 end
+input_dim(net::NetI) = size(net.xt.w1, 1)
 function Base.show(io::IO, net::NetI)
-    println(io, "Network with nonlinearity \"$(net.f)\" and $(size(net.xt.w1, 1))D gaussian input")
+    println(io, "Network with nonlinearity \"$(net.f)\" and $(input_dim(net))D gaussian input")
     print(io, "student width = $(size(net.u, 1)), teacher width = $(size(net.u, 2))")
 end
 _ind(i, D) = (((i-1)÷D)+1, (i-1)%D+1)
@@ -613,7 +614,7 @@ function train(net::NetI, p;
     _, g!, h!, fgh!, fg! = get_functions(net, maxnorm;
                                          hessian_template = nothing,
                                          scale = loss_scale,
-                                         batcher = FullBatch(1:1),
+#                                          batcher = FullBatch(1:1),
                                          losstype = :mse,
                                          verbosity)
     lossfunc = u -> loss(net, u; losstype, transpose = false)
