@@ -8,7 +8,7 @@ using NLopt, Sundials
 
 export Net, NetI, Adam, Descent, FullBatch, MiniBatch, ScheduledMiniBatch
 export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict
-export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2
+export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube
 export load_potential_approximator, pickle, unpickle
 
 ###
@@ -36,6 +36,14 @@ square′(x, y) = x
 square′(x) = x
 square′′(x::T, y, y′) where T = one(T)
 square′′(::T) where T = one(T)
+
+cube(x) = x^3
+deriv(::typeof(cube)) = cube′
+second_deriv(::typeof(cube)) = cube′′
+cube′(x, y) = 3x^2
+cube′(x) = 3x^2
+cube′′(x, y, y′) = 6x
+cube′′(x) = 6x
 
 softplus(x) = IfElse.ifelse(x < 34, Base.log(Base.exp(x) + 1), x)
 deriv(::typeof(softplus)) = softplus′
