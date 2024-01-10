@@ -958,24 +958,39 @@ function swapsign(f!)
         end
     end
 end
+Base.@kwdef mutable struct ODETerminator{T}
+    i::Int = 0
+    t0::Float64 = 0.
+    maxtime::Float64 = 180.
+    maxiter::Int = typemax(Int)
+    stopped_by::String = ""
+    o::T
+end
+function (terminator::ODETerminator)(u, t, integrator)
+    if terminator.i == 0
+        terminator.t0 = time()
+    end
+    terminator.i += 1
+    Δ = time() - terminator.t0
+    if converged(terminator.o)
+        terminator.stopped_by = "patience ($(terminator.o.patience))"
+        true
+    elseif Δ > terminator.maxtime
+        terminator.stopped_by = "maxtime_ode > $(terminator.maxtime)s"
+        true
+    elseif t > 1e300
+        terminator.stopped_by = "t > 1e300"
+        true
+    elseif terminator.i ≥ terminator.maxiter
+        terminator.stopped_by = "maxiterations_ode ≥ $(terminator.maxiter)"
+        true
+    else
+        false
+    end
+end
 function terminator(o; maxtime = 20, maxiter = typemax(Int), losstype = :mse)
-    i = Ref(0)
-    t0 = Ref(0.)
-    condition = (u, t, integrator) -> begin
-                                 if i[] == 0
-                                     t0[] = time()
-                                     false
-                                 end
-                                 i[] += 1
-                                 Δ = time() - t0[]
-#                                  @show Δ t
-                                 return converged(o) ||
-                                        Δ > maxtime ||
-                                        t > 1e300 || # otherwise solver gets stuck and never calls again this function; for unknown reason
-                                        i[] ≥ maxiter #||
-#                                         (minloss > 0. && _loss(integrator.p.net, u; losstype, forward = false) < minloss)
-                             end
-    DiscreteCallback(condition, terminate!)
+    DiscreteCallback(ODETerminator(; o, maxtime = float(maxtime), maxiter),
+                     terminate!)
 end
 function optim_solver_default(x)
     length(x) ≤ 128 && return Newton(linesearch = Optim.LineSearches.HagerZhang(linesearchmax = 1000))
@@ -1228,6 +1243,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
     G = zero(x)
     trajectory = nothing
     tstart = time()
+    ode_stopped_by = nothing
     if maxiterations_ode > 0
         if verbosity > 0
             @info "Starting ODE solver $alg."
@@ -1245,8 +1261,14 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                 if save_everystep
                     push!(trajectory, (i, copy(x)))
                 end
-                i == maxiterations_ode && break
-                time() - t0 > maxtime_ode && break
+                if i == maxiterations_ode
+                    ode_stopped_by = "maxiterations_ode"
+                    break
+                end
+                if time() - t0 > maxtime_ode
+                    ode_stopped_by = "maxtime_ode"
+                    break
+                end
                 i += 1
             end
             ode_iterations = i
@@ -1267,6 +1289,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                                   losstype)
             sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
                                    callback = termin)
+            ode_stopped_by = termin.condition.stopped_by
             if sol.t[end] == 0
                 println("starting ODE fallback.")
                 fallbackalg = CVODE_BDF(linear_solver=:GMRES)
@@ -1321,7 +1344,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                 println("NLopt returned with code $res")
             end
             optim_stopped_by = if converged(g!.l.o)
-                "patience"
+                "patience ($(g!.l.o.patience))"
             elseif res == NLopt.MAXTIME_REACHED
                 "maxtime"
             elseif res == NLopt.MAXEVAL_REACHED
@@ -1379,7 +1402,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
               x, init = p, loss, ode_loss, gnorm, gnorm_regularized,
               ode_time_run, ode_iterations, net, optim_time_run,
               converged = converged(g!.l.o),
-              optim_stopped_by,
+              optim_stopped_by, ode_stopped_by,
               total_time = time() - tstart,
               optim_iterations, trajectory, lossfunc, transpose_solution)
     if result == :raw
@@ -1445,10 +1468,13 @@ _extract(::Val{:optim_iterations}, res) = res.optim_iterations
 _extract(::Val{:input}, res) = isa(res.net, Net) ? Array(res.net.input) : nothing
 _extract(::Val{:target}, res) = isa(res.net, Net) ? Array(res.net.target) : nothing
 _extract(::Val{:teacher}, res) = isa(res.net, NetI) ? res.net.xt : nothing
-_extract(::Val{:layerspec}, res) = isa(res.net, Net) ? map(x -> (x[1], string(x[2]), x[3]), res.net.layerspec) : ((size(res.net.u, 1), isa(res.net.f, PotentialApproximator) ? res.net.f.f : res.net.f , false),)
+_extract(::Val{:layerspec}, res) = _layerextract(res.net)
+_layerextract(net::Net) = map(x -> (x[1], string(x[2]), x[3]), net.layerspec)
+_layerextract(net::NetI) = (size(net.u, 1), isa(net.f, PotentialApproximator) ? string(net.f.f) : string(net.f) , false)
 _extract(::Val{:trajectory}, res) = isnothing(res.trajectory) ? nothing : OrderedDict(t => params2dict(transpose_solution(res, u)) for (t, u) in res.trajectory)
 _extract(::Val{:loss_curve}, res) = isnothing(res.trajectory) ? nothing : [res.lossfunc(u) for (_, u) in res.trajectory]
 _extract(::Val{:optim_stopped_by}, res) = res.optim_stopped_by
+_extract(::Val{:ode_stopped_by}, res) = res.ode_stopped_by
 """
     params2dict(p)
 
@@ -1465,7 +1491,7 @@ function result2dict(res;
                      exclude = String[],
                      include = nothing)
     if include === nothing
-        include = ["loss", "converged", "optim_stopped_by", "total_time", "ode_loss", "gnorm", "gnorm_regularized", "init", "x", "ode_x", "ode_time_run", "ode_iterations", "optim_time_run", "optim_iterations", "input", "target", "layerspec", "trajectory", "loss_curve", "teacher"]
+        include = ["loss", "converged", "optim_stopped_by", "ode_stopped_by", "total_time", "ode_loss", "gnorm", "gnorm_regularized", "init", "x", "ode_x", "ode_time_run", "ode_iterations", "optim_time_run", "optim_iterations", "input", "target", "layerspec", "trajectory", "loss_curve", "teacher"]
     end
     filter(x -> !isnothing(last(x)),
            Dict(Pair(x, _extract(Val(Symbol(x)), res))
