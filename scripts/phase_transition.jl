@@ -4,7 +4,7 @@ using Distributed
     using MLPGradientFlow, LinearAlgebra, ComponentArrays, OrdinaryDiffEq, Random
 end
 
-configs = collect(Iterators.product(1:20, 1:50))
+configs = collect(Iterators.product(eval(Meta.parse(ARGS[1])), 1:50))
 
 @sync @distributed for (seed, num_student) in configs
     @show seed num_student
@@ -15,6 +15,6 @@ configs = collect(Iterators.product(1:20, 1:50))
     res = train(ni, p0,
                 maxiterations_optim = 0,
                 maxiterations_ode = 10^5,
-                maxtime_ode = 3) # 1hr
+                maxtime_ode = 60*60) # 1hr
     MLPGradientFlow.pickle("erf-stud=$num_student-teach=50-seed=$seed.pkl", res)
 end
