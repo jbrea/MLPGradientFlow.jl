@@ -2,6 +2,7 @@ using Distributed
 @everywhere begin
     cd(@__DIR__)
     using MLPGradientFlow, LinearAlgebra, ComponentArrays, OrdinaryDiffEq, Random
+    LinearAlgebra.BLAS.set_num_threads(1)
 end
 
 num_teach = eval(Meta.parse(ARGS[2]))
