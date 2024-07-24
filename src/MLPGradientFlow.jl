@@ -354,7 +354,7 @@ function Net(; layers, input::AbstractArray{T}, target::AbstractArray{S},
     if T != S && !(S <: Integer)
         @warn "`input` ($T) and `target` ($S) have not the same type."
     end
-    if layers[end][2] ≠ softmax && size(target, 1) ≠ layers[end][1]
+    if layers[end][2] ≠ softmax && !ismissing(layers[end][1]) && size(target, 1) ≠ layers[end][1]
         error("Output size of the network ($(layers[end][1])) does not match dimensionalty of the target ($(size(target, 1))).")
     end
     if isa(target, AbstractVector{<:Integer})
