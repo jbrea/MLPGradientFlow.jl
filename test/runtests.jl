@@ -210,8 +210,8 @@ end
     h!(H, x)
     @test H == tmpH
     res = train(n, x, maxtime_ode = 1, maxtime_optim = 1, verbosity = 1, result = :raw)
-    @test loss(n, res.init) > loss(n, res.ode[end])
-    @test loss(n, res.ode[end]) ≥ loss(n, res.x) - sqrt(eps())
+    @test loss(n, res.init) > loss(n, res.ode.u[end])
+    @test loss(n, res.ode.u[end]) ≥ loss(n, res.x) - sqrt(eps())
 end
 
 @testset "infinite data" begin

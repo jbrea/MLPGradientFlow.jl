@@ -354,7 +354,9 @@ function Net(; layers, input::AbstractArray{T}, target::AbstractArray{S},
     if T != S && !(S <: Integer)
         @warn "`input` ($T) and `target` ($S) have not the same type."
     end
-    @assert size(target, 1) == layers[end][1]
+    if layers[end][2] ≠ softmax && size(target, 1) ≠ layers[end][1]
+        error("Output size of the network ($(layers[end][1])) does not match dimensionalty of the target ($(size(target, 1))).")
+    end
     if isa(target, AbstractVector{<:Integer})
         if minimum(target) < 1 || maximum(target) > layers[end][1]
             error("Target labels have to be between 1 and $(layers[end][1]) (the number of units in the output layer). Got range $(minimum(target)),...,$(maximum(target))")
@@ -1329,7 +1331,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                 trajectory = [(t, copy(x .= sol(t)))
                               for t in max.(sol.t[1], min.(sol.t[end], 10.0.^range(log10(sol.t[1]+1), log10(sol.t[end]+1), n_samples_trajectory) .- 1))]
             end
-            x .= sol[end]
+            x .= sol.u[end]
             ode_x = copy(x)
         end
     else
