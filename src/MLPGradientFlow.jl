@@ -18,6 +18,21 @@ export load_potential_approximator, pickle, unpickle
 softmax(x::AbstractMatrix) = (a -> a ./ sum(a, dims = 1))(exp.(x))
 softmax(x::AbstractVector) = (a -> a ./ sum(a))(exp.(x))
 
+struct Poly{N,T}
+    coeff::NTuple{N,T}
+end
+Base.broadcastable(x::Poly) = Ref(x)
+Poly(coeff...; T = Float64) = Poly{length(coeff),T}(coeff)
+function _poly_inner(coeff, arg, x)
+    first(coeff) * arg + _poly_inner(Base.tail(coeff), arg*x, x)
+end
+_poly_inner(coeff::Tuple{T}, arg, ::Any) where T = first(coeff) * arg
+(p::Poly)(x::T, unused...) where T = _poly_inner(p.coeff, one(T), x)
+function deriv(p::Poly)
+    Poly(ntuple(i -> p.coeff[i+1]*i, length(p.coeff)-1))
+end
+second_deriv(p::Poly) = deriv(deriv(p))
+
 const sigmoid = sigmoid_fast
 deriv(::typeof(sigmoid)) = sigmoid′
 second_deriv(::typeof(sigmoid)) = sigmoid′′
@@ -339,6 +354,7 @@ function Net(; layers, input::AbstractArray{T}, target::AbstractArray{S},
     if T != S && !(S <: Integer)
         @warn "`input` ($T) and `target` ($S) have not the same type."
     end
+    @assert size(target, 1) == layers[end][1]
     if isa(target, AbstractVector{<:Integer})
         if minimum(target) < 1 || maximum(target) > layers[end][1]
             error("Target labels have to be between 1 and $(layers[end][1]) (the number of units in the output layer). Got range $(minimum(target)),...,$(maximum(target))")

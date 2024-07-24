@@ -6,8 +6,8 @@ using Test
 Random.seed!(123)
 
 @testset "activation functions" begin
-    import MLPGradientFlow: g, sigmoid, tanh, square, relu, gelu, softplus, deriv, second_deriv, A_mul_B!, alloc_a′, alloc_a′′
-    for f in (g, sigmoid, square, relu, gelu, tanh, softplus, sigmoid2)
+    import MLPGradientFlow: g, sigmoid, tanh, square, relu, gelu, softplus, Poly, deriv, second_deriv, A_mul_B!, alloc_a′, alloc_a′′
+    for f in (g, sigmoid, square, relu, gelu, tanh, softplus, sigmoid2, Poly(.2, .3, -.3, .4))
         @info "testing activation function $f."
         inp = [-.2, 3.]'
         y = f.(inp)
