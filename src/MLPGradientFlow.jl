@@ -8,7 +8,7 @@ using NLopt, Sundials
 
 export Net, NetI, Adam, Descent, FullBatch, MiniBatch, ScheduledMiniBatch
 export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict
-export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube
+export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube, Poly
 export load_potential_approximator, pickle, unpickle
 
 ###
