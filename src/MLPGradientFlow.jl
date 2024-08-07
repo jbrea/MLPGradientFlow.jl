@@ -8,7 +8,7 @@ using NLopt, Sundials
 
 export Net, NetI, Adam, Descent, FullBatch, MiniBatch, ScheduledMiniBatch
 export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict
-export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube, Poly
+export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube, Poly, selu
 export load_potential_approximator, pickle, unpickle
 
 ###
@@ -32,6 +32,14 @@ function deriv(p::Poly)
     Poly(ntuple(i -> p.coeff[i+1]*i, length(p.coeff)-1))
 end
 second_deriv(p::Poly) = deriv(deriv(p))
+
+selu(x::T) where T = T(1.05070098)*IfElse.ifelse(x > 0, x, T(1.67326324) * (exp(x) - 1))
+deriv(::typeof(selu)) = selu′
+second_deriv(::typeof(selu)) = selu′′
+selu′(x, y) = selu′(x)
+selu′(x::T) where T = T(1.05070098)*IfElse.ifelse(x > 0, one(T), T(1.67326324) * exp(x))
+selu′′(x, y, y′) = selu′′(x)
+selu′′(x::T) where T = IfElse.ifelse(x > 0, zero(T), T(1.05070098*1.67326324) * exp(x))
 
 const sigmoid = sigmoid_fast
 deriv(::typeof(sigmoid)) = sigmoid′
