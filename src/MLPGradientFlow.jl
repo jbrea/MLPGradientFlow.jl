@@ -1069,17 +1069,16 @@ function (l::Loss)(x; nx = weightnorm(x), forward = true, derivs = 0)
     loss = _loss(o.net, x;
                  losstype = o.losstype, forward,
                  derivs, scale = o.scale, verbosity = o.verbosity)
+    if nx > o.maxnorm
+        loss += (nx - o.maxnorm)^2/2
+    end
     o.fk += 1
     if loss < o.bestl
         o.k_last_best = o.fk
         o.bestl = loss/o.scale
         o.bestx .= x
     end
-    if nx > o.maxnorm
-        loss + (nx - o.maxnorm)^2/2
-    else
-        loss
-    end
+    loss
 end
 struct Grad{T,N}
     l::Loss{T,N}
