@@ -6,8 +6,8 @@ using Test
 Random.seed!(123)
 
 @testset "activation functions" begin
-    import MLPGradientFlow: g, sigmoid, tanh, square, relu, gelu, softplus, deriv, second_deriv, A_mul_B!, alloc_a′, alloc_a′′
-    for f in (g, sigmoid, square, relu, gelu, tanh, softplus, sigmoid2)
+    import MLPGradientFlow: g, sigmoid, tanh, square, relu, gelu, softplus, Poly, selu, deriv, second_deriv, A_mul_B!, alloc_a′, alloc_a′′
+    for f in (g, sigmoid, square, relu, gelu, tanh, softplus, sigmoid2, Poly(.2, .3, -.3, .4), selu)
         @info "testing activation function $f."
         inp = [-.2, 3.]'
         y = f.(inp)
@@ -210,8 +210,8 @@ end
     h!(H, x)
     @test H == tmpH
     res = train(n, x, maxtime_ode = 1, maxtime_optim = 1, verbosity = 1, result = :raw)
-    @test loss(n, res.init) > loss(n, res.ode[end])
-    @test loss(n, res.ode[end]) ≥ loss(n, res.x) - sqrt(eps())
+    @test loss(n, res.init) > loss(n, res.ode.u[end])
+    @test loss(n, res.ode.u[end]) ≥ loss(n, res.x) - sqrt(eps())
 end
 
 @testset "infinite data" begin

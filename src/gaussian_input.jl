@@ -127,6 +127,7 @@ g3(f::PotentialApproximator, r) = g3(f.f, r)
 g3(f::Function, r) = nex(x -> f(r*x)^2)
 g3(::Val{relu}, r) = r^2/2
 g3(::Val{sigmoid2}, r) = 2/pi*asin(r^2/(1 + r^2))
+g3(::Val{cube}, r) = 15r^6
 function g3(f::PotentialApproximator, r1, r2, u)
     f.g(r1, r2, u)[1]
 end
@@ -149,6 +150,7 @@ function g3(::Val{relu}, r1, r2, u)
     end
 end
 g3(::Val{sigmoid2}, r1, r2, u) = 2/pi*asin(r1*r2*u/(sqrt(1 + r1^2)*sqrt(1 + r2^2)))
+g3(::Val{cube}, r1, r2, u) = r1^3 * r2^3 * (6u^3 + 9u)
 function dgdr(f::PotentialApproximator, r)
     dgdr(f.f, r)
 end
@@ -158,6 +160,7 @@ function dgdr(f::Function, r)
 end
 dgdr(::Val{relu}, r) = r
 dgdr(::Val{sigmoid2}, r) = (4*r)/(sqrt(2*r^2 + 1)*(π*r^2 + π))
+dgdr(::Val{cube}, r) = 90*r^5
 function d2gdr(f::PotentialApproximator, r)
     d2gdr(f.f, r)
 end
@@ -168,6 +171,7 @@ function d2gdr(f::Function, r; kwargs...)
 end
 d2gdr(::Val{relu}, r) = 1
 d2gdr(::Val{sigmoid2}, r) = -(4*(4*r^4 + r^2 - 1))/(π*(r^2 + 1)^2*(2*r^2 + 1)^(3/2))
+d2gdr(::Val{cube}, r) = 450*r^4
 function dgdru(f::PotentialApproximator, r1, r2, u)
     f.dgdru(r1, r2, u)
 end
@@ -194,6 +198,10 @@ end
 function dgdru(::Val{sigmoid2}, r1, r2, u)
     (2*r2*u)/(π*(r1^2 + 1)*sqrt(r1^2*(1 - r2^2*(u^2 - 1)) + r2^2 + 1)),
     (2*r1*r2)/(π*sqrt(r1^2*(1 - r2^2*(u^2 - 1)) + r2^2 + 1))
+end
+function dgdru(::Val{cube}, r1, r2, u)
+    3*r1^2*r2^3*(6u^3+9u),
+    r1^3*r2^3*(18*u^2+9)
 end
 function d2gdru(f::PotentialApproximator, r1, r2, u)
     f.d2gdru(r1, r2, u)
@@ -240,6 +248,13 @@ function d2gdru(::Val{sigmoid2}, r1, r2, u)
     (2*r2*(r2^2 + 1))/(π*(r1^2*(-(r2^2*(u^2 - 1) - 1)) + r2^2 + 1)^(3/2)),
     (2*r1*(r1^2 + 1))/(π*(r2^2*(-(r1^2*(u^2 - 1) - 1)) + r1^2 + 1)^(3/2)),
     (2*r1^3*r2^3*u)/(π*(r1^2*(-(r2^2*(u^2 - 1) - 1)) + r2^2 + 1)^(3/2))
+end
+function d2gdru(::Val{cube}, r1, r2, u)
+    6r1*r2^3*(6u^3+9u),
+    9*r1^2*r2^2*(6u^3+9u),
+    3*r1^2*r2^3*(18u^2+9),
+    3*r1^3*r2^2*(18u^2+9),
+    r1^3*r2^3*36u
 end
 
 
@@ -381,8 +396,9 @@ function NetI(x::AbstractVector{T1}, xt::AbstractVector{T2}, f;
           loss_xt
          )
 end
+input_dim(net::NetI) = size(net.xt.w1, 1)
 function Base.show(io::IO, net::NetI)
-    println(io, "Network with nonlinearity \"$(net.f)\" and $(size(net.xt.w1, 1))D gaussian input")
+    println(io, "Network with nonlinearity \"$(net.f)\" and $(input_dim(net))D gaussian input")
     print(io, "student width = $(size(net.u, 1)), teacher width = $(size(net.u, 2))")
 end
 _ind(i, D) = (((i-1)÷D)+1, (i-1)%D+1)
@@ -613,7 +629,7 @@ function train(net::NetI, p;
     _, g!, h!, fgh!, fg! = get_functions(net, maxnorm;
                                          hessian_template = nothing,
                                          scale = loss_scale,
-                                         batcher = FullBatch(1:1),
+#                                          batcher = FullBatch(1:1),
                                          losstype = :mse,
                                          verbosity)
     lossfunc = u -> loss(net, u; losstype, transpose = false)
