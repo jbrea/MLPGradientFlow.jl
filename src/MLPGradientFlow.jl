@@ -1204,6 +1204,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                include = nothing,
                exclude = String[],
                transpose_solution = false,
+               dt = nothing,
                optim_options = Optim.Options(iterations = maxiterations_optim,
                                                time_limit = maxtime_optim,
                                                f_abstol = -eps(),
@@ -1258,7 +1259,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
 #                                   minloss = minloss,
                                   losstype)
             sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
-                                   callback = termin)
+                                   dt, callback = termin)
             if sol.t[end] == 0
                 println("starting ODE fallback.")
                 fallbackalg = CVODE_BDF(linear_solver=:GMRES)
