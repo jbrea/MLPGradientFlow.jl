@@ -109,11 +109,13 @@ df = DataFrame(seed = Int[], k = String[], ρ = String[],
               )
 for (seed, k, ρ) in settings
     for activation in (g,)
-#         f = "simsjuly23/fp3-$activation-$seed-$k-$ρ.dat"
-        f = "simsjuly23/fp5-$activation-$seed-$k-$ρ.dat"
+        f = "simsjuly23/fp3-$activation-$seed-$k-$ρ.dat"
+#         f = "simsjuly23/fp5-$activation-$seed-$k-$ρ.dat"
+        f = "simsjuly23/fixedpoint-$activation-$seed-$k-$ρ-random_teacher.dat"
         isfile(f) || continue
         net, x, xt = setup(seed = seed, Din = k, k = k, r = k*ρ, f = activation)
-        _, _, _, res, _ = deserialize(f)
+#         _, _, _, res, _ = deserialize(f)
+        _, _, _, _, res, _ = deserialize(f)
         finalres = res
         res1 = finalres
 #         finalres = res[2]
@@ -172,13 +174,16 @@ df.on_saddle = df.largest_pairwise_sim .≈ 1
 df.infty = df.xnorm .> 4800;
 df.wtf = df.on_saddle
 
-dff = leftjoin(df, df1, on = [:seed, :k, :ρ], makeunique = true)
+df.converged = (x -> x["converged"]).(df.res)
+sum(df.converged)
+
+dff = leftjoin(df, df2, on = [:seed, :k, :ρ], makeunique = true)
 dff = leftjoin(dff, df2, on = [:seed, :k, :ρ], makeunique = true)
 dropmissing!(dff)
 
 maximum(dff.loss - dff.loss_2)
 
-dff.dl = dff.loss - dff.loss_2
+dff.dl = dff.loss - dff.loss_1
 sort!(dff, :dl)
 
 @pgf Axis({xmode = "log", ymode = "log", xlabel = "loss", ylabel = "xnorm"},

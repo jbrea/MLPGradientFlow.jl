@@ -8,7 +8,7 @@ using NLopt, Sundials
 
 export Net, NetI, Adam, Descent, FullBatch, MiniBatch, ScheduledMiniBatch
 export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict
-export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2
+export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube, Poly, selu
 export load_potential_approximator, pickle, unpickle
 
 ###
@@ -17,6 +17,29 @@ export load_potential_approximator, pickle, unpickle
 
 softmax(x::AbstractMatrix) = (a -> a ./ sum(a, dims = 1))(exp.(x))
 softmax(x::AbstractVector) = (a -> a ./ sum(a))(exp.(x))
+
+struct Poly{N,T}
+    coeff::NTuple{N,T}
+end
+Base.broadcastable(x::Poly) = Ref(x)
+Poly(coeff...; T = Float64) = Poly{length(coeff),T}(coeff)
+function _poly_inner(coeff, arg, x)
+    first(coeff) * arg + _poly_inner(Base.tail(coeff), arg*x, x)
+end
+_poly_inner(coeff::Tuple{T}, arg, ::Any) where T = first(coeff) * arg
+(p::Poly)(x::T, unused...) where T = _poly_inner(p.coeff, one(T), x)
+function deriv(p::Poly)
+    Poly(ntuple(i -> p.coeff[i+1]*i, length(p.coeff)-1))
+end
+second_deriv(p::Poly) = deriv(deriv(p))
+
+selu(x::T) where T = T(1.05070098)*IfElse.ifelse(x > 0, x, T(1.67326324) * (exp(x) - 1))
+deriv(::typeof(selu)) = selu′
+second_deriv(::typeof(selu)) = selu′′
+selu′(x, y) = selu′(x)
+selu′(x::T) where T = T(1.05070098)*IfElse.ifelse(x > 0, one(T), T(1.67326324) * exp(x))
+selu′′(x, y, y′) = selu′′(x)
+selu′′(x::T) where T = IfElse.ifelse(x > 0, zero(T), T(1.05070098*1.67326324) * exp(x))
 
 const sigmoid = sigmoid_fast
 deriv(::typeof(sigmoid)) = sigmoid′
@@ -36,6 +59,14 @@ square′(x, y) = x
 square′(x) = x
 square′′(x::T, y, y′) where T = one(T)
 square′′(::T) where T = one(T)
+
+cube(x) = x^3
+deriv(::typeof(cube)) = cube′
+second_deriv(::typeof(cube)) = cube′′
+cube′(x, y) = 3x^2
+cube′(x) = 3x^2
+cube′′(x, y, y′) = 6x
+cube′′(x) = 6x
 
 softplus(x) = IfElse.ifelse(x < 34, Base.log(Base.exp(x) + 1), x)
 deriv(::typeof(softplus)) = softplus′
@@ -330,6 +361,9 @@ function Net(; layers, input::AbstractArray{T}, target::AbstractArray{S},
                Din = size(input, 1) - last(first(layers))*(1-bias_adapt_input)) where {T,S}
     if T != S && !(S <: Integer)
         @warn "`input` ($T) and `target` ($S) have not the same type."
+    end
+    if layers[end][2] ≠ softmax && !ismissing(layers[end][1]) && size(target, 1) ≠ layers[end][1]
+        error("Output size of the network ($(layers[end][1])) does not match dimensionalty of the target ($(size(target, 1))).")
     end
     if isa(target, AbstractVector{<:Integer})
         if minimum(target) < 1 || maximum(target) > layers[end][1]
@@ -950,27 +984,42 @@ function swapsign(f!)
         end
     end
 end
+Base.@kwdef mutable struct ODETerminator{T}
+    i::Int = 0
+    t0::Float64 = 0.
+    maxtime::Float64 = 180.
+    maxiter::Int = typemax(Int)
+    stopped_by::String = ""
+    o::T
+end
+function (terminator::ODETerminator)(u, t, integrator)
+    if terminator.i == 0
+        terminator.t0 = time()
+    end
+    terminator.i += 1
+    Δ = time() - terminator.t0
+    if converged(terminator.o)
+        terminator.stopped_by = "patience ($(terminator.o.patience))"
+        true
+    elseif Δ > terminator.maxtime
+        terminator.stopped_by = "maxtime_ode > $(terminator.maxtime)s"
+        true
+    elseif t > 1e300
+        terminator.stopped_by = "t > 1e300"
+        true
+    elseif terminator.i ≥ terminator.maxiter
+        terminator.stopped_by = "maxiterations_ode ≥ $(terminator.maxiter)"
+        true
+    else
+        false
+    end
+end
 function terminator(o; maxtime = 20, maxiter = typemax(Int), losstype = :mse)
-    i = Ref(0)
-    t0 = Ref(0.)
-    condition = (u, t, integrator) -> begin
-                                 if i[] == 0
-                                     t0[] = time()
-                                     false
-                                 end
-                                 i[] += 1
-                                 Δ = time() - t0[]
-#                                  @show Δ t
-                                 return converged(o) ||
-                                        Δ > maxtime ||
-                                        t > 1e300 || # otherwise solver gets stuck and never calls again this function; for unknown reason
-                                        i[] ≥ maxiter #||
-#                                         (minloss > 0. && _loss(integrator.p.net, u; losstype, forward = false) < minloss)
-                             end
-    DiscreteCallback(condition, terminate!)
+    DiscreteCallback(ODETerminator(; o, maxtime = float(maxtime), maxiter),
+                     terminate!)
 end
 function optim_solver_default(x)
-    length(x) ≤ 128 && return Newton()
+    length(x) ≤ 128 && return Newton(linesearch = Optim.LineSearches.HagerZhang(linesearchmax = 1000))
     length(x) ≤ 1024 && return :LD_SLSQP
     length(x) ≤ 10^6 && return BFGS()
     return LBFGS()
@@ -1006,7 +1055,7 @@ Base.@kwdef mutable struct OptimizationState{T,N}
     show_progress::Bool = true
     hessian_template = nothing
     progress_interval::Float64 = 5.
-    patience::Int = 10^4
+    patience::Int = 2*10^4
     losstype::Symbol = isa(net, NetI) ? :mse : net.layers[end].f == softmax ? :crossentropy : :se
 end
 function OptimizationState(net; maxnorm = Inf, scale = 1., progress_interval = 5., kwargs...)
@@ -1020,17 +1069,16 @@ function (l::Loss)(x; nx = weightnorm(x), forward = true, derivs = 0)
     loss = _loss(o.net, x;
                  losstype = o.losstype, forward,
                  derivs, scale = o.scale, verbosity = o.verbosity)
+    if nx > o.maxnorm
+        loss += (nx - o.maxnorm)^2/2
+    end
     o.fk += 1
     if loss < o.bestl
         o.k_last_best = o.fk
         o.bestl = loss/o.scale
         o.bestx .= x
     end
-    if nx > o.maxnorm
-        loss + (nx - o.maxnorm)^2/2
-    else
-        loss
-    end
+    loss
 end
 struct Grad{T,N}
     l::Loss{T,N}
@@ -1221,6 +1269,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
     G = zero(x)
     trajectory = nothing
     tstart = time()
+    ode_stopped_by = nothing
     if maxiterations_ode > 0
         if verbosity > 0
             @info "Starting ODE solver $alg."
@@ -1238,8 +1287,14 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                 if save_everystep
                     push!(trajectory, (i, copy(x)))
                 end
-                i == maxiterations_ode && break
-                time() - t0 > maxtime_ode && break
+                if i == maxiterations_ode
+                    ode_stopped_by = "maxiterations_ode"
+                    break
+                end
+                if time() - t0 > maxtime_ode
+                    ode_stopped_by = "maxtime_ode"
+                    break
+                end
                 i += 1
             end
             ode_iterations = i
@@ -1260,6 +1315,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                                   losstype)
             sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
                                    dt, callback = termin)
+            ode_stopped_by = termin.condition.stopped_by
             if sol.t[end] == 0
                 println("starting ODE fallback.")
                 fallbackalg = CVODE_BDF(linear_solver=:GMRES)
@@ -1283,7 +1339,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                 trajectory = [(t, copy(x .= sol(t)))
                               for t in max.(sol.t[1], min.(sol.t[end], 10.0.^range(log10(sol.t[1]+1), log10(sol.t[end]+1), n_samples_trajectory) .- 1))]
             end
-            x .= sol[end]
+            x .= sol.u[end]
             ode_x = copy(x)
         end
     else
@@ -1293,6 +1349,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
         sol = nothing
         ode_x = nothing
     end
+    optim_stopped_by = nothing
     if maxiterations_optim > 0
         g!.l.o.k_last_best = g!.l.o.fk # reset patience
         if verbosity > 0
@@ -1313,7 +1370,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                 println("NLopt returned with code $res")
             end
             optim_stopped_by = if converged(g!.l.o)
-                "patience"
+                "patience ($(g!.l.o.patience))"
             elseif res == NLopt.MAXTIME_REACHED
                 "maxtime"
             elseif res == NLopt.MAXEVAL_REACHED
@@ -1371,7 +1428,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
               x, init = p, loss, ode_loss, gnorm, gnorm_regularized,
               ode_time_run, ode_iterations, net, optim_time_run,
               converged = converged(g!.l.o),
-              optim_stopped_by,
+              optim_stopped_by, ode_stopped_by,
               total_time = time() - tstart,
               optim_iterations, trajectory, lossfunc, transpose_solution)
     if result == :raw
@@ -1437,10 +1494,13 @@ _extract(::Val{:optim_iterations}, res) = res.optim_iterations
 _extract(::Val{:input}, res) = isa(res.net, Net) ? Array(res.net.input) : nothing
 _extract(::Val{:target}, res) = isa(res.net, Net) ? Array(res.net.target) : nothing
 _extract(::Val{:teacher}, res) = isa(res.net, NetI) ? res.net.xt : nothing
-_extract(::Val{:layerspec}, res) = isa(res.net, Net) ? map(x -> (x[1], string(x[2]), x[3]), res.net.layerspec) : ((size(res.net.u, 1), isa(res.net.f, PotentialApproximator) ? res.net.f.f : res.net.f , false),)
+_extract(::Val{:layerspec}, res) = _layerextract(res.net)
+_layerextract(net::Net) = map(x -> (x[1], string(x[2]), x[3]), net.layerspec)
+_layerextract(net::NetI) = (size(net.u, 1), isa(net.f, PotentialApproximator) ? string(net.f.f) : string(net.f) , false)
 _extract(::Val{:trajectory}, res) = isnothing(res.trajectory) ? nothing : OrderedDict(t => params2dict(transpose_solution(res, u)) for (t, u) in res.trajectory)
 _extract(::Val{:loss_curve}, res) = isnothing(res.trajectory) ? nothing : [res.lossfunc(u) for (_, u) in res.trajectory]
 _extract(::Val{:optim_stopped_by}, res) = res.optim_stopped_by
+_extract(::Val{:ode_stopped_by}, res) = res.ode_stopped_by
 """
     params2dict(p)
 
@@ -1457,7 +1517,7 @@ function result2dict(res;
                      exclude = String[],
                      include = nothing)
     if include === nothing
-        include = ["loss", "converged", "optim_stopped_by", "total_time", "ode_loss", "gnorm", "gnorm_regularized", "init", "x", "ode_x", "ode_time_run", "ode_iterations", "optim_time_run", "optim_iterations", "input", "target", "layerspec", "trajectory", "loss_curve", "teacher"]
+        include = ["loss", "converged", "optim_stopped_by", "ode_stopped_by", "total_time", "ode_loss", "gnorm", "gnorm_regularized", "init", "x", "ode_x", "ode_time_run", "ode_iterations", "optim_time_run", "optim_iterations", "input", "target", "layerspec", "trajectory", "loss_curve", "teacher"]
     end
     filter(x -> !isnothing(last(x)),
            Dict(Pair(x, _extract(Val(Symbol(x)), res))
@@ -1491,11 +1551,20 @@ function unpickle(filename)
     Pickle.Torch.THload(filename)
 end
 
+input_dim(net::Net) = size(net.input, 1) - first(net.layers).bias
 random_params(net; kwargs...) = random_params(Random.GLOBAL_RNG, net; kwargs...)
-function random_params(rng, net; distr_fn = glorot_normal)
-    glorot(rng, (size(net.input, 1) - first(net.layers).bias,
+function random_params(rng, net::Net; distr_fn = glorot_normal)
+    glorot(rng, (input_dim(net),
                  Int.(getproperty.(net.layers, :k))...), eltype(net.input),
            biases = getproperty.(net.layers, :bias); distr_fn)
+end
+function random_params(rng, net::NetI; distr_fn = glorot_normal, transpose = true)
+    w = glorot(rng, (input_dim(net), size(net.u, 1), 1), eltype(net.u))
+    if transpose
+        transpose_params(w)
+    else
+        w
+    end
 end
 glorot_normal(in, out, T = Float64) = glorot_normal(Random.GLOBAL_RNG, in, out, T)
 glorot_uniform(in, out, T = Float64) = glorot_uniform(Random.GLOBAL_RNG, in, out, T)
