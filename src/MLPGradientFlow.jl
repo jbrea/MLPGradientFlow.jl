@@ -1313,37 +1313,24 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                                   maxiter = maxiterations_ode,
 #                                   minloss = minloss,
                                   losstype)
-            if typeof(alg) === Euler
-                sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
-                                   dt = dt, callback = termin)
-            else
-                sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
-                                   callback = termin)
-            end
+            sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
+                                callback = termin,
+                                (dt === nothing ? NamedTuple() : (;dt=dt))...)
             ode_stopped_by = termin.condition.stopped_by
             if sol.t[end] == 0
                 println("starting ODE fallback.")
                 fallbackalg = CVODE_BDF(linear_solver=:GMRES)
                 probfallback = ODEProblem(odef, x0, (0., 1e-2), (; net,))
-                if typeof(alg) === Euler
-                    solfallback = solve(probfallback, fallbackalg;
-                                        dense, save_everystep, abstol, reltol,
-                                        dt = dt, callback = termin)
-                else
-                    solfallback = solve(probfallback, fallbackalg;
-                                        dense, save_everystep, abstol, reltol,
-                                        callback = termin)
-                end
+                solfallback = solve(probfallback, fallbackalg;
+                                    dense, save_everystep, abstol, reltol,
+                                    callback = termin,
+                                    (dt === nothing ? NamedTuple() : (;dt=dt))...)
                 @show g!.l(solfallback[end])
                 prob = ODEProblem(odef, solfallback[end],
                                   (0., Float64(maxT)), (; net,))
-                if typeof(alg) === Euler
-                    sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
-                                        dt = dt, callback = termin)
-                else
-                    sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
-                                        callback = termin)
-                end
+                sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
+                                    callback = termin,
+                                    (dt === nothing ? NamedTuple() : (;dt=dt))...)
             end
             if sol.t[end] == maxT
                 @info "Reached maxT = $maxT."
