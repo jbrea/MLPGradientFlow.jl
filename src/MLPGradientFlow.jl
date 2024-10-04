@@ -1314,7 +1314,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
 #                                   minloss = minloss,
                                   losstype)
             sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
-                                   dt, callback = termin)
+                                   dt = dt, callback = termin)
             ode_stopped_by = termin.condition.stopped_by
             if sol.t[end] == 0
                 println("starting ODE fallback.")
@@ -1322,12 +1322,12 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                 probfallback = ODEProblem(odef, x0, (0., 1e-2), (; net,))
                 solfallback = solve(probfallback, fallbackalg;
                                     dense, save_everystep, abstol, reltol,
-                                    dt, callback = termin)
+                                    dt = dt, callback = termin)
                 @show g!.l(solfallback[end])
                 prob = ODEProblem(odef, solfallback[end],
                                   (0., Float64(maxT)), (; net,))
                 sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
-                                       dt, callback = termin)
+                                       dt = dt, callback = termin)
             end
             if sol.t[end] == maxT
                 @info "Reached maxT = $maxT."
