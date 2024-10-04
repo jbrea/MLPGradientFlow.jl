@@ -1313,21 +1313,37 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                                   maxiter = maxiterations_ode,
 #                                   minloss = minloss,
                                   losstype)
-            sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
+            if typeof(alg) === Euler
+                sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
                                    dt = dt, callback = termin)
+            else
+                sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
+                                   callback = termin)
+            end
             ode_stopped_by = termin.condition.stopped_by
             if sol.t[end] == 0
                 println("starting ODE fallback.")
                 fallbackalg = CVODE_BDF(linear_solver=:GMRES)
                 probfallback = ODEProblem(odef, x0, (0., 1e-2), (; net,))
-                solfallback = solve(probfallback, fallbackalg;
-                                    dense, save_everystep, abstol, reltol,
-                                    dt = dt, callback = termin)
+                if typeof(alg) === Euler
+                    solfallback = solve(probfallback, fallbackalg;
+                                        dense, save_everystep, abstol, reltol,
+                                        dt = dt, callback = termin)
+                else
+                    solfallback = solve(probfallback, fallbackalg;
+                                        dense, save_everystep, abstol, reltol,
+                                        callback = termin)
+                end
                 @show g!.l(solfallback[end])
                 prob = ODEProblem(odef, solfallback[end],
                                   (0., Float64(maxT)), (; net,))
-                sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
-                                       dt = dt, callback = termin)
+                if typeof(alg) === Euler
+                    sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
+                                        dt = dt, callback = termin)
+                else
+                    sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
+                                        callback = termin)
+                end
             end
             if sol.t[end] == maxT
                 @info "Reached maxT = $maxT."
