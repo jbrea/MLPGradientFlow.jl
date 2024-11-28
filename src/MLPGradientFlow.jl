@@ -1070,7 +1070,7 @@ function (l::Loss)(x; nx = weightnorm(x), forward = true, derivs = 0)
                  losstype = o.losstype, forward,
                  derivs, scale = o.scale, verbosity = o.verbosity)
     if nx > o.maxnorm
-        loss += (nx - o.maxnorm)^2/2
+        loss += (nx - o.maxnorm)^3/3
     end
     o.fk += 1
     if loss < o.bestl
@@ -1097,7 +1097,7 @@ function (g::Grad)(dx, x; nx = weightnorm(x), derivs = 1, forward = true, kwargs
         end
     end
     if nx > o.maxnorm
-        dx .+= (nx - o.maxnorm)*x/length(x)
+        dx .+= (nx - o.maxnorm)^2*x/length(x)
     end
     dx
 end
@@ -1110,7 +1110,7 @@ function (h::Hess)(H, x; nx = weightnorm(x), kwargs...)
              scale = o.scale, kwargs...)
     o.hk += 1
     if nx > o.maxnorm
-        H .+= x * x'/length(x)^2 + I*(nx - o.maxnorm)/length(x)
+        H .+= 2*(nx - o.maxnorm) * x * x'/length(x)^2 + I*(nx - o.maxnorm)^2/length(x)
     end
 end
 struct NLOptObj{T,N} <: Function
