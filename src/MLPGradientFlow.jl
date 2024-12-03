@@ -466,7 +466,8 @@ function squared_error(a, target; batch = indices(target, static(2)))
 end
 function _loss(net::Net, x, input = net.input, target = net.target;
                derivs = 0, forward = true, verbosity = 0, losstype = :mse,
-               batch = indices(input, static(2)), scale = one(eltype(input)))
+               batch = indices(input, static(2)), scale = one(eltype(input)),
+               nx = weightnorm(x), maxnorm = Inf)
     forward && forward!(net, x, input; batch, derivs, verbosity)
     l = last(net.layers)
     res = if losstype == :crossentropy
@@ -474,9 +475,11 @@ function _loss(net::Net, x, input = net.input, target = net.target;
     else
         squared_error(l.a, target; batch)
     end
-    N = length(batch)
-    (losstype == :mse || losstype == :crossentropy) && return scale*res/N
-    losstype == :rmse && return scale*sqrt(res/N)
+    if nx > maxnorm
+        res += (nx - maxnorm)^3/3
+    end
+    (losstype == :mse || losstype == :crossentropy) && return scale*res/length(batch)
+    losstype == :rmse && return scale*sqrt(res/length(batch))
     scale*res
 end
 """
@@ -596,13 +599,17 @@ function gradient!(dx, net::Net, x;
                    forward = true, derivs = 1, verbosity = 1,
                    scale = one(eltype(x)),
                    losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
-                   batch = indices(net.input, static(2)))
+                   batch = indices(net.input, static(2)),
+                   nx = weightnorm(x), maxnorm = Inf)
     input = net.input
     target = net.target
     forward && forward!(net, x, input; batch, derivs, verbosity)
     layers = net.layers
     backprop!(layers, target, x; batch, derivs, losstype, scale)
     update_derivatives!(dx, layers, input, x; batch)
+    if nx > maxnorm
+        dx .+= (nx - maxnorm)^2*x/length(x)
+    end
     dx
 end
 """
@@ -823,7 +830,8 @@ function hessian!(h, net::Net, x;
                   forward = true, backprop = true, verbosity = 1,
                   scale = one(eltype(net.input)),
                   losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
-                  batch = indices(net.input, static(2)))
+                  batch = indices(net.input, static(2)),
+                  nx = weightnorm(x), maxnorm = Inf)
     input = net.input
     target = net.target
     forward && forward!(net, x, input; derivs = 2, verbosity, batch)
@@ -833,6 +841,9 @@ function hessian!(h, net::Net, x;
     compute_b!(layers, layers, x; batch, losstype, scale)
     compute_h!(h, layers, input, x; batch)
     copy_h!(h)
+    if nx > maxnorm
+        h.flat .+= 2*(nx - maxnorm) * x * x'/length(x)^2 + I*(nx - maxnorm)^2/length(x)
+    end
     h.flat
 end
 struct Hessian{T}
@@ -1067,11 +1078,8 @@ end
 function (l::Loss)(x; nx = weightnorm(x), forward = true, derivs = 0)
     o = l.o
     loss = _loss(o.net, x;
-                 losstype = o.losstype, forward,
+                 losstype = o.losstype, forward, nx, maxnorm = o.maxnorm,
                  derivs, scale = o.scale, verbosity = o.verbosity)
-    if nx > o.maxnorm
-        loss += (nx - o.maxnorm)^3/3
-    end
     o.fk += 1
     if loss < o.bestl
         o.k_last_best = o.fk
@@ -1085,7 +1093,7 @@ struct Grad{T,N}
 end
 function (g::Grad)(dx, x; nx = weightnorm(x), derivs = 1, forward = true, kwargs...)
     o = g.l.o
-    gradient!(dx, o.net, x; scale = o.scale, derivs, forward, kwargs...)
+    gradient!(dx, o.net, x; scale = o.scale, derivs, forward, nx, maxnorm = o.maxnorm, kwargs...)
     if forward == true
         g.l(x; nx, forward = false)
     end
@@ -1096,9 +1104,6 @@ function (g::Grad)(dx, x; nx = weightnorm(x), derivs = 1, forward = true, kwargs
             @printf "%s: evals: (ℓ: %6i, ∇: %6i, ∇²: %6i), loss: %g\n" now() o.fk o.gk o.hk o.bestl
         end
     end
-    if nx > o.maxnorm
-        dx .+= (nx - o.maxnorm)^2*x/length(x)
-    end
     dx
 end
 struct Hess{T,N}
@@ -1107,11 +1112,9 @@ end
 function (h::Hess)(H, x; nx = weightnorm(x), kwargs...)
     o = h.g.l.o
     hessian!(Hessian(o.hessian_template, H), o.net, x;
-             scale = o.scale, kwargs...)
+             nx, maxnorm = o.maxnorm, scale = o.scale, kwargs...)
     o.hk += 1
-    if nx > o.maxnorm
-        H .+= 2*(nx - o.maxnorm) * x * x'/length(x)^2 + I*(nx - o.maxnorm)^2/length(x)
-    end
+    H
 end
 struct NLOptObj{T,N} <: Function
     g::Grad{T,N}

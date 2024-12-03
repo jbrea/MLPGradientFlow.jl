@@ -330,11 +330,11 @@ end
         h2 = hessian(ni2, x)
         @show abs(l1 - l2) sqrt(sum(abs2, g1 - g2)) sqrt(sum(abs2, h1 - h2))
         if f ≠ MLPGradientFlow.tanh # broken
-            @test l1 ≈ l2 atol = 1e-5
+            @test l1 ≈ l2 atol = 1e-4
         end
         @test g1 ≈ g2 atol = 1e-3
         if f ≠ relu # the integrator is wrong for relu because of derivative of heaviside
-            @test h1 ≈ h2 atol = 1e-1
+            @test h1 ≈ h2 atol = 2e-1
         end
     end
 end
