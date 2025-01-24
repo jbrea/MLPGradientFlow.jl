@@ -1051,7 +1051,7 @@ function default_hessian_template(p, maxiterations_ode, alg,
     end
 end
 weightnorm(x) = sum(abs2, x)/(2*length(x))
-Base.@kwdef mutable struct OptimizationState{T,N}
+Base.@kwdef mutable struct OptimizationState{T,N,Tau}
     net::N
     t0::Float64 = time()
     fk::Int = 0
@@ -1068,7 +1068,10 @@ Base.@kwdef mutable struct OptimizationState{T,N}
     progress_interval::Float64 = 5.
     patience::Int = 2*10^4
     losstype::Symbol = isa(net, NetI) ? :mse : net.layers[end].f == softmax ? :crossentropy : :se
+    tauinv::Tau = nothing
 end
+scale!(x, ::Nothing) = x
+scale!(x, tauinv) = x .*= tauinv
 function OptimizationState(net; maxnorm = Inf, scale = 1., progress_interval = 5., kwargs...)
     OptimizationState(; net, maxnorm = float(maxnorm), scale = float(scale), progress_interval = float(progress_interval), kwargs...)
 end
@@ -1104,7 +1107,7 @@ function (g::Grad)(dx, x; nx = weightnorm(x), derivs = 1, forward = true, kwargs
             @printf "%s: evals: (ℓ: %6i, ∇: %6i, ∇²: %6i), loss: %g\n" now() o.fk o.gk o.hk o.bestl
         end
     end
-    dx
+    scale!(dx, g.l.o.tauinv)
 end
 struct Hess{T,N}
     g::Grad{T,N}
@@ -1114,7 +1117,7 @@ function (h::Hess)(H, x; nx = weightnorm(x), kwargs...)
     hessian!(Hessian(o.hessian_template, H), o.net, x;
              nx, maxnorm = o.maxnorm, scale = o.scale, kwargs...)
     o.hk += 1
-    H
+    scale!(H, h.g.l.o.tauinv)
 end
 struct NLOptObj{T,N} <: Function
     g::Grad{T,N}
@@ -1204,6 +1207,7 @@ function train(net::Net, p;
                maxiterations_ode = 10^6,
                maxiterations_optim = 10^5,
                patience = 10^4,
+               tauinv = nothing,
                hessian_template = default_hessian_template(p, maxiterations_ode, alg, maxiterations_optim, optim_solver, verbosity),
                kwargs...)
     checkparams(net, p)
@@ -1221,6 +1225,7 @@ function train(net::Net, p;
                                          scale = loss_scale,
                                          patience,
                                          losstype,
+                                         tauinv = copy(tauinv),
 #                                          batcher = isa(batcher, Function) ? batcher(net.input) : batcher,
                                          show_progress,
                                          progress_interval = float(progress_interval),
@@ -1357,6 +1362,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
     end
     optim_stopped_by = nothing
     if maxiterations_optim > 0
+        g!.l.o.tauinv .= 1
         g!.l.o.k_last_best = g!.l.o.fk # reset patience
         if verbosity > 0
             @info "Starting optimizer $optim_solver."
