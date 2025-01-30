@@ -8,7 +8,7 @@ using NLopt, Sundials
 
 export Net, NetI, Adam, Descent, FullBatch, MiniBatch, ScheduledMiniBatch
 export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict
-export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube, Poly, selu
+export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube, Poly, selu, silu
 export load_potential_approximator, pickle, unpickle
 
 ###
@@ -32,6 +32,28 @@ function deriv(p::Poly)
     Poly(ntuple(i -> p.coeff[i+1]*i, length(p.coeff)-1))
 end
 second_deriv(p::Poly) = deriv(deriv(p))
+
+silu(x) = x*sigmoid(x)
+deriv(::typeof(silu)) = silu′
+second_deriv(::typeof(silu)) = silu′′
+function silu′(x::T, y) where T
+    s = IfElse.ifelse(x == 0, T(0.5), y/x)
+    x*sigmoid′(x, s) + s
+end
+function silu′(x)
+    s = sigmoid(x)
+    x*sigmoid′(x, s) + s
+end
+function silu′′(x::T, y, y′) where T
+    s = IfElse.ifelse(x == 0, T(.5), y/x)
+    s′ = sigmoid′(x, s)
+    x*sigmoid′′(x, s, s′) + 2*s′
+end
+function silu′′(x)
+    s = sigmoid(x)
+    s′ = sigmoid′(x, s)
+    x*sigmoid′′(x, s, s′) + 2*s′
+end
 
 selu(x::T) where T = T(1.05070098)*IfElse.ifelse(x > 0, x, T(1.67326324) * (exp(x) - 1))
 deriv(::typeof(selu)) = selu′
@@ -1225,7 +1247,7 @@ function train(net::Net, p;
                                          scale = loss_scale,
                                          patience,
                                          losstype,
-                                         tauinv = copy(tauinv),
+                                         tauinv = isnothing(tauinv) ? nothing : copy(ComponentArray(tauinv)),
 #                                          batcher = isa(batcher, Function) ? batcher(net.input) : batcher,
                                          show_progress,
                                          progress_interval = float(progress_interval),
@@ -1362,7 +1384,9 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
     end
     optim_stopped_by = nothing
     if maxiterations_optim > 0
-        g!.l.o.tauinv .= 1
+        if !isnothing(g!.l.o.tauinv)
+            g!.l.o.tauinv .= 1
+        end
         g!.l.o.k_last_best = g!.l.o.fk # reset patience
         if verbosity > 0
             @info "Starting optimizer $optim_solver."

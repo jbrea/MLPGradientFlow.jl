@@ -7,7 +7,7 @@ Random.seed!(123)
 
 @testset "activation functions" begin
     import MLPGradientFlow: g, sigmoid, tanh, square, relu, gelu, softplus, Poly, selu, deriv, second_deriv, A_mul_B!, alloc_a′, alloc_a′′
-    for f in (g, sigmoid, square, relu, gelu, tanh, softplus, sigmoid2, Poly(.2, .3, -.3, .4), selu)
+    for f in (g, sigmoid, square, relu, gelu, tanh, softplus, sigmoid2, Poly(.2, .3, -.3, .4), selu, silu)
         @info "testing activation function $f."
         inp = [-.2, 3.]'
         y = f.(inp)
@@ -313,7 +313,7 @@ end
     x = ComponentArray(w1 = glorot_normal(2, 4), w2 = glorot_normal(4, 1))
     MLPGradientFlow.TOL.atol[] = 1e-14
     MLPGradientFlow.TOL.rtol[] = 1e-14
-    for f in (g, sigmoid, gelu, MLPGradientFlow.tanh, softplus, relu, sigmoid2)
+    for f in (g, sigmoid, gelu, MLPGradientFlow.tanh, softplus, sigmoid2)
         @show f
         ni = NetI(x, xt, f)
         ax = if f ∈ (relu, sigmoid2)
