@@ -489,7 +489,7 @@ end
 function _loss(net::Net, x, input = net.input, target = net.target;
                derivs = 0, forward = true, verbosity = 0, losstype = :mse,
                batch = indices(input, static(2)), scale = one(eltype(input)),
-               nx = weightnorm(x), maxnorm = Inf)
+               nx = weightnorm(x), maxnorm = Inf, merge = nothing)
     forward && forward!(net, x, input; batch, derivs, verbosity)
     l = last(net.layers)
     res = if losstype == :crossentropy
@@ -499,6 +499,14 @@ function _loss(net::Net, x, input = net.input, target = net.target;
     end
     if nx > maxnorm
         res += (nx - maxnorm)^3/3
+    end
+    if merge !== nothing
+        w1 = getweights(net.layers[1], x)
+        λ = merge.lambda/2*length(batch)
+        i, j = merge.pair
+        for k in indices(w1, 2)
+            res += λ * (w1[i, k] - w1[j, k])^2
+        end
     end
     (losstype == :mse || losstype == :crossentropy) && return scale*res/length(batch)
     losstype == :rmse && return scale*sqrt(res/length(batch))
@@ -622,7 +630,8 @@ function gradient!(dx, net::Net, x;
                    scale = one(eltype(x)),
                    losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
                    batch = indices(net.input, static(2)),
-                   nx = weightnorm(x), maxnorm = Inf)
+                   nx = weightnorm(x), maxnorm = Inf,
+                   merge = nothing)
     input = net.input
     target = net.target
     forward && forward!(net, x, input; batch, derivs, verbosity)
@@ -631,6 +640,16 @@ function gradient!(dx, net::Net, x;
     update_derivatives!(dx, layers, input, x; batch)
     if nx > maxnorm
         dx .+= (nx - maxnorm)^2*x/length(x)
+    end
+    if merge !== nothing
+        dw = getweights(net.layers[1], dx)
+        w = getweights(net.layers[1], x)
+        λ = merge.lambda * size(input, 2)
+        i, j = merge.pair
+        for k in indices(w, 2)
+            dw[i, k] -= λ * (w[j, k] - w[i, k])
+            dw[j, k] -= λ * (w[i, k] - w[j, k])
+        end
     end
     dx
 end
@@ -853,7 +872,7 @@ function hessian!(h, net::Net, x;
                   scale = one(eltype(net.input)),
                   losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
                   batch = indices(net.input, static(2)),
-                  nx = weightnorm(x), maxnorm = Inf)
+                  nx = weightnorm(x), maxnorm = Inf, merge = nothing)
     input = net.input
     target = net.target
     forward && forward!(net, x, input; derivs = 2, verbosity, batch)
@@ -862,6 +881,17 @@ function hessian!(h, net::Net, x;
     compute_g!(layers, x; batch)
     compute_b!(layers, layers, x; batch, losstype, scale)
     compute_h!(h, layers, input, x; batch)
+    if merge !== nothing
+        λ = merge.lambda * size(input, 2)
+        i, j = merge.pair
+        hw1 = h.blocks[1]
+        for k in indices(hw1, 2)
+            hw1[i, k, i, k] += λ
+            hw1[i, k, j, k] -= λ
+            hw1[j, k, j, k] += λ
+            hw1[j, k, i, k] -= λ
+        end
+    end
     copy_h!(h)
     if nx > maxnorm
         h.flat .+= 2*(nx - maxnorm) * x * x'/length(x)^2 + I*(nx - maxnorm)^2/length(x)
@@ -1073,7 +1103,7 @@ function default_hessian_template(p, maxiterations_ode, alg,
     end
 end
 weightnorm(x) = sum(abs2, x)/(2*length(x))
-Base.@kwdef mutable struct OptimizationState{T,N,Tau}
+Base.@kwdef mutable struct OptimizationState{T,N,Tau,M}
     net::N
     t0::Float64 = time()
     fk::Int = 0
@@ -1091,6 +1121,7 @@ Base.@kwdef mutable struct OptimizationState{T,N,Tau}
     patience::Int = 2*10^4
     losstype::Symbol = isa(net, NetI) ? :mse : net.layers[end].f == softmax ? :crossentropy : :se
     tauinv::Tau = nothing
+    merge::M = nothing
 end
 scale!(x, ::Nothing) = x
 scale!(x, tauinv) = x .*= tauinv
@@ -1104,7 +1135,7 @@ function (l::Loss)(x; nx = weightnorm(x), forward = true, derivs = 0)
     o = l.o
     loss = _loss(o.net, x;
                  losstype = o.losstype, forward, nx, maxnorm = o.maxnorm,
-                 derivs, scale = o.scale, verbosity = o.verbosity)
+                 derivs, scale = o.scale, verbosity = o.verbosity, merge = o.merge)
     o.fk += 1
     if loss < o.bestl
         o.k_last_best = o.fk
@@ -1118,7 +1149,7 @@ struct Grad{T,N}
 end
 function (g::Grad)(dx, x; nx = weightnorm(x), derivs = 1, forward = true, kwargs...)
     o = g.l.o
-    gradient!(dx, o.net, x; scale = o.scale, derivs, forward, nx, maxnorm = o.maxnorm, kwargs...)
+    gradient!(dx, o.net, x; scale = o.scale, derivs, forward, nx, maxnorm = o.maxnorm, merge = o.merge, kwargs...)
     if forward == true
         g.l(x; nx, forward = false)
     end
@@ -1137,7 +1168,7 @@ end
 function (h::Hess)(H, x; nx = weightnorm(x), kwargs...)
     o = h.g.l.o
     hessian!(Hessian(o.hessian_template, H), o.net, x;
-             nx, maxnorm = o.maxnorm, scale = o.scale, kwargs...)
+             nx, maxnorm = o.maxnorm, scale = o.scale, merge = o.merge, kwargs...)
     o.hk += 1
     scale!(H, h.g.l.o.tauinv)
 end
@@ -1230,6 +1261,7 @@ function train(net::Net, p;
                maxiterations_optim = 10^5,
                patience = 10^4,
                tauinv = nothing,
+               merge = nothing,
                hessian_template = default_hessian_template(p, maxiterations_ode, alg, maxiterations_optim, optim_solver, verbosity),
                kwargs...)
     checkparams(net, p)
@@ -1247,6 +1279,7 @@ function train(net::Net, p;
                                          scale = loss_scale,
                                          patience,
                                          losstype,
+                                         merge,
                                          tauinv = isnothing(tauinv) ? nothing : copy(ComponentArray(tauinv)),
 #                                          batcher = isa(batcher, Function) ? batcher(net.input) : batcher,
                                          show_progress,

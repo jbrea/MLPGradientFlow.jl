@@ -58,9 +58,12 @@ fw_forward(x::ComponentArray, f, input) = fw_forward(unflatten(x), f, input)
 fw_layer2(x, (w, f)) = f.(w*x)
 fw_forward2(x, f, input) = foldl(fw_layer2, zip(getproperty.(Ref(x), keys(x)), f), init = input)
 fw_forward3(x, f, input) = foldl(fw_layer2, zip(x, f), init = input)
+merge_loss(x, i, j) = sum(abs2, x[1][1][i, :] - x[1][1][j, :]) + (x[1][2][i] - x[1][2][j])^2
+merge_loss(x::ComponentArray, i, j) = sum(abs2, x.w1[i, :] - x.w1[j, :]) + (x.b1[i] - x.b1[j])^2
 function fw_lossfunc(input, target, f;
                      sizes = nothing, losstype = :mse,
                      scale = 1/size(input, 2),
+                     merge = nothing,
                      forward = sizes !== nothing ? fw_forward3 : fw_forward)
     x -> begin
         if sizes !== nothing
@@ -75,11 +78,17 @@ function fw_lossfunc(input, target, f;
         end
         if losstype == :crossentropy
             output = softmax(forward(x, f, input))
-            -sum(getindex.(Ref(log.(output)),
+            res = -sum(getindex.(Ref(log.(output)),
                            target, 1:size(input, 2)))*scale
         else
-            sum(abs2, forward(x, f, input) - target)*scale
+            res = sum(abs2, forward(x, f, input) - target)*scale
         end
+        if merge !== nothing
+            i, j = merge.pair
+            λ = merge.lambda/2
+            res += λ * merge_loss(x, i, j)
+        end
+        res
     end
 end
 
@@ -108,6 +117,7 @@ end
     @test fw_forward(θ, f, input) ≈ forward!(n, x)
     fw_loss = fw_lossfunc(input, target, f)
     @test fw_loss(θ) ≈ loss(n, x, losstype = :mse)
+    @test fw_loss(θ) ≈ loss(n, flatten(θ), losstype = :mse)
     pred = n(x)
     @test sqrt(sum(abs2, pred - target)/size(target, 2)) ≈ loss(n, x, losstype = :rmse)
     @test sum(abs2, pred - target)/size(target, 2) ≈ loss(n, x, losstype = :mse)
@@ -121,12 +131,15 @@ end
     fw_loss2 = fw_lossfunc(input, target, f)
     @test fw_loss2(θ) ≈ loss(n, x, input, target)
     @test 8.3*fw_loss2(θ) ≈ loss(n, x, input, target, scale = 8.3)
+    merge = (pair = (1, 2), lambda = 1e-2)
+    fw_loss3 = fw_lossfunc(input, target, f; merge)
+    @test fw_loss3(θ) ≈ loss(n, x, input, target; merge)
 end
 
 @testset "gradient" begin
     import MLPGradientFlow: loss, params, Net, g, sigmoid, gradient, gradient!
-    input = randn(2, 3)
-    target = randn(2, 3)
+    input = randn(2, 5)
+    target = randn(2, 5)
     θ = ((randn(4, 2), randn(4)),
          (randn(2, 4), nothing),
          (randn(2, 2), randn(2)),
@@ -139,11 +152,19 @@ end
     fw_loss = fw_lossfunc(input, target, f, scale = 1)
     G = gradient(n, x)
     @test G ≈ ForwardDiff.gradient(fw_loss, flatten(θ))/size(input, 2)
+    G2 = gradient(n, flatten(θ))
+    @test G ≈ G2
+    fw_loss2 = fw_lossfunc(input, target, f)
+    @test G ≈ ForwardDiff.gradient(fw_loss2, flatten(θ))
     Gs = gradient(n, x, scale = 7.2)
     @test Gs ≈ 7.2*G
     oldG = copy(G)
     gradient!(G, n, x)
     @test oldG == G/size(input, 2)
+    merge = (pair = (1, 2), lambda = 1e-2)
+    fw_loss3 = fw_lossfunc(input, target, f; merge)
+    G = gradient(n, x; merge)
+    @test G ≈ ForwardDiff.gradient(fw_loss3, flatten(θ))
 end
 
 @testset "hessian" begin
@@ -165,6 +186,10 @@ end
     @test H ≈ ForwardDiff.hessian(fw_loss, flatten(θ))/size(input, 2)
     Hs = hessian(n, x, scale = 3.4)
     @test Hs ≈ 3.4*H
+    merge = (pair = (1, 2), lambda = 1e-2)
+    fw_loss3 = fw_lossfunc(input, target, f; merge)
+    H = hessian(n, x; merge)
+    @test H ≈ ForwardDiff.hessian(fw_loss3, flatten(θ))
     e, v = hessian_spectrum(n, x)
     @test size(v) == (31, 31)
 end
