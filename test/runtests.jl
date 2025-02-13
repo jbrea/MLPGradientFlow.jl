@@ -131,7 +131,7 @@ end
     fw_loss2 = fw_lossfunc(input, target, f)
     @test fw_loss2(θ) ≈ loss(n, x, input, target)
     @test 8.3*fw_loss2(θ) ≈ loss(n, x, input, target, scale = 8.3)
-    merge = (pair = (1, 2), lambda = 1e-2)
+    merge = (layer = 1, pair = (1, 2), lambda = 1e-2)
     fw_loss3 = fw_lossfunc(input, target, f; merge)
     @test fw_loss3(θ) ≈ loss(n, x, input, target; merge)
 end
@@ -161,7 +161,7 @@ end
     oldG = copy(G)
     gradient!(G, n, x)
     @test oldG == G/size(input, 2)
-    merge = (pair = (1, 2), lambda = 1e-2)
+    merge = (layer = 1, pair = (1, 2), lambda = 1e-2)
     fw_loss3 = fw_lossfunc(input, target, f; merge)
     G = gradient(n, x; merge)
     @test G ≈ ForwardDiff.gradient(fw_loss3, flatten(θ))
@@ -186,7 +186,7 @@ end
     @test H ≈ ForwardDiff.hessian(fw_loss, flatten(θ))/size(input, 2)
     Hs = hessian(n, x, scale = 3.4)
     @test Hs ≈ 3.4*H
-    merge = (pair = (1, 2), lambda = 1e-2)
+    merge = (layer = 1, pair = (1, 2), lambda = 1e-2)
     fw_loss3 = fw_lossfunc(input, target, f; merge)
     H = hessian(n, x; merge)
     @test H ≈ ForwardDiff.hessian(fw_loss3, flatten(θ))
