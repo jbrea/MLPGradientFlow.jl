@@ -501,7 +501,7 @@ function _loss(net::Net, x, input = net.input, target = net.target;
         res += (nx - maxnorm)^3/3
     end
     if merge !== nothing
-        w1 = getweights(net.layers[1], x)
+        w1 = getweights(net.layers[merge.layer], x)
         λ = merge.lambda/2*length(batch)
         i, j = merge.pair
         for k in indices(w1, 2)
@@ -642,8 +642,8 @@ function gradient!(dx, net::Net, x;
         dx .+= (nx - maxnorm)^2*x/length(x)
     end
     if merge !== nothing
-        dw = getweights(net.layers[1], dx)
-        w = getweights(net.layers[1], x)
+        dw = getweights(net.layers[merge.layer], dx)
+        w = getweights(net.layers[merge.layer], x)
         λ = merge.lambda * size(input, 2)
         i, j = merge.pair
         for k in indices(w, 2)
@@ -884,7 +884,7 @@ function hessian!(h, net::Net, x;
     if merge !== nothing
         λ = merge.lambda * size(input, 2)
         i, j = merge.pair
-        hw1 = h.blocks[1]
+        hw1 = h.blocks[merge.layer]
         for k in indices(hw1, 2)
             hw1[i, k, i, k] += λ
             hw1[i, k, j, k] -= λ
