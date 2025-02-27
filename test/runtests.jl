@@ -19,13 +19,13 @@ Random.seed!(123)
         a = zeros(1, 2)
         a′ = alloc_a′(f, Float64, 1, 2, false)
         a′′ = alloc_a′′(f, Float64, 1, 2)
-        A_mul_B!(a, f, w, inp, 1:2)
+        A_mul_B!(a, f, w, inp)
         @test a ≈ y
-        A_mul_B!(a, a′, f, w, inp, 1:2)
+        A_mul_B!(a, a′, f, w, inp)
         @test a ≈ y
         @test a′ ≈ y′
         @test deriv(f).(inp) ≈ y′
-        A_mul_B!(a, a′, a′′, f, w, inp, 1:2)
+        A_mul_B!(a, a′, a′′, f, w, inp)
         @test a ≈ y
         @test a′ ≈ y′
         @test a′′ ≈ y′′
@@ -127,13 +127,14 @@ end
     @test loss(n, Array(x)) == loss(n, x)
     input = randn(2, 5)
     target = randn(2, 5)
-    @test fw_forward(θ, f, input) ≈ forward!(n, x, input, derivs = 0)
+    # the following test is not supposed to work anymore
+#     @test fw_forward(θ, f, input) ≈ forward!(n, x, input, derivs = 0)
     fw_loss2 = fw_lossfunc(input, target, f)
-    @test fw_loss2(θ) ≈ loss(n, x, input, target)
-    @test 8.3*fw_loss2(θ) ≈ loss(n, x, input, target, scale = 8.3)
+    @test fw_loss2(θ) ≈ loss(n, x; input, target)
+    @test 8.3*fw_loss2(θ) ≈ loss(n, x; input, target, scale = 8.3)
     merge = (layer = 1, pair = (1, 2), lambda = 1e-2)
     fw_loss3 = fw_lossfunc(input, target, f; merge)
-    @test fw_loss3(θ) ≈ loss(n, x, input, target; merge)
+    @test fw_loss3(θ) ≈ loss(n, x; input, target, merge)
 end
 
 @testset "gradient" begin

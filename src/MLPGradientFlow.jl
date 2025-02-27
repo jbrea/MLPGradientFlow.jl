@@ -6,7 +6,7 @@ using ComponentArrays, LoopVectorization, OrdinaryDiffEq, ArrayInterface, Static
       StrideArraysCore, Pickle, Cuba, HCubature, ForwardDiff, SpecialFunctions
 using NLopt, Sundials
 
-export Net, NetI, Adam, Descent, FullBatch, MiniBatch, ScheduledMiniBatch
+export Net, NetI, Adam, Descent, FullBatch, MiniBatch
 export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict
 export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube, Poly, selu, silu
 export load_potential_approximator, pickle, unpickle
@@ -155,22 +155,20 @@ function second_deriv(f; multiargs = true)
     end
 end
 
-@inline function A_mul_B!(a::AbstractMatrix{T}, f, w, input, batch) where T
-    K = size(input, 1)
-    @tturbo for m ∈ indices(w, 1), n ∈ batch
+@inline function A_mul_B!(a::AbstractMatrix{T}, f, w, input) where T
+    @tturbo for m ∈ indices(w, 1), n ∈ indices(input, 2)
         amn = zero(T)
-        for k ∈ 1:K
+        for k ∈ indices(input, 1)
             amn += w[m,k] * input[k,n]
         end
         a[m, n] = f(amn)
     end
 end
-@inline function A_mul_B!(a::AbstractMatrix{T}, a′, f, w, input, batch) where T
-    K = size(input, 1)
+@inline function A_mul_B!(a::AbstractMatrix{T}, a′, f, w, input) where T
     f′ = deriv(f)
-    @tturbo for m ∈ indices(w, 1), n ∈ batch
+    @tturbo for m ∈ indices(w, 1), n ∈ indices(input, 2)
         amn = zero(T)
-        for k ∈ 1:K
+        for k ∈ indices(input, 1)
             amn += w[m,k] * input[k,n]
         end
         y = f(amn)
@@ -178,13 +176,12 @@ end
         a[m, n] = y
     end
 end
-@inline function A_mul_B!(a::AbstractMatrix{T}, a′, a′′, f, w, input, batch) where T
-    K = size(input, 1)
+@inline function A_mul_B!(a::AbstractMatrix{T}, a′, a′′, f, w, input) where T
     f′ = deriv(f)
     f′′ = second_deriv(f)
-    @tturbo for m ∈ indices(w, 1), n ∈ batch
+    @tturbo for m ∈ indices(w, 1), n ∈ indices(input, 2)
         amn = zero(T)
-        for k ∈ 1:K
+        for k ∈ indices(input, 1)
             amn += w[m,k] * input[k,n]
         end
         y = f(amn)
@@ -194,19 +191,18 @@ end
         a[m, n] = y
     end
 end
-@inline A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(relu), w, input, batch) where T =
-    A_mul_B!(a, a′, relu, w, input, batch)
-@inline A_mul_B!(a::AbstractMatrix{T}, a′, ::typeof(identity), w, input, batch) where T =
-    A_mul_B!(a, identity, w, input, batch)
-@inline A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(identity), w, input, batch) where T =
-    A_mul_B!(a, identity, w, input, batch)
-@inline A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(square), w, input, batch) where T =
-    A_mul_B!(a, a′, square, w, input, batch)
-@inline function A_mul_B!(a::AbstractMatrix{T}, a′, ::typeof(g), w, input, batch) where T
-    K = size(input, 1)
-    @tturbo for m ∈ indices(w, 1), n ∈ batch
+@inline A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(relu), w, input) where T =
+    A_mul_B!(a, a′, relu, w, input)
+@inline A_mul_B!(a::AbstractMatrix{T}, a′, ::typeof(identity), w, input) where T =
+    A_mul_B!(a, identity, w, input)
+@inline A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(identity), w, input) where T =
+    A_mul_B!(a, identity, w, input)
+@inline A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(square), w, input) where T =
+    A_mul_B!(a, a′, square, w, input)
+@inline function A_mul_B!(a::AbstractMatrix{T}, a′, ::typeof(g), w, input) where T
+    @tturbo for m ∈ indices(w, 1), n ∈ indices(input, 2)
         amn = zero(T)
-        for k ∈ 1:K
+        for k ∈ indices(input, 1)
             amn += w[m,k] * input[k,n]
         end
         y1 = sigmoid(4*amn)
@@ -214,11 +210,10 @@ end
         a[m, n] = y1 + softplus(amn)
     end
 end
-@inline function A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(g), w, input, batch) where T
-    K = size(input, 1)
-    @tturbo for m ∈ indices(w, 1), n ∈ batch
+@inline function A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(g), w, input) where T
+    @tturbo for m ∈ indices(w, 1), n ∈ indices(input, 2)
         amn = zero(T)
-        for k ∈ 1:K
+        for k ∈ indices(input, 1)
             amn += w[m,k] * input[k,n]
         end
         y1 = sigmoid(4*amn)
@@ -229,38 +224,37 @@ end
         a[m, n] = y1 + softplus(amn)
     end
 end
-A_mul_B!(a::AbstractMatrix{T}, ::typeof(softmax), w, input, batch) where T =
-    A_mul_B!(a, nothing, nothing, softmax, w, input, batch)
-A_mul_B!(a::AbstractMatrix{T}, a′, ::typeof(softmax), w, input, batch) where T =
-    A_mul_B!(a, a′, nothing, softmax, w, input, batch)
-@inline function A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(softmax), w, input, batch) where T
-    K = size(input, 1)
+A_mul_B!(a::AbstractMatrix{T}, ::typeof(softmax), w, input) where T =
+    A_mul_B!(a, nothing, nothing, softmax, w, input)
+A_mul_B!(a::AbstractMatrix{T}, a′, ::typeof(softmax), w, input) where T =
+    A_mul_B!(a, a′, nothing, softmax, w, input)
+@inline function A_mul_B!(a::AbstractMatrix{T}, a′, a′′, ::typeof(softmax), w, input) where T
     lastidx = size(a, 1)
-    @tturbo for m ∈ indices(w, 1), n ∈ batch
+    @tturbo for m ∈ indices(w, 1), n ∈ indices(input, 2)
         amn = zero(T)
-        for k ∈ 1:K
+        for k ∈ indices(input, 1)
             amn += w[m,k] * input[k,n]
         end
         a[m, n] = amn
     end
-    @tturbo for n ∈ batch
+    @tturbo for n ∈ indices(input, 2)
         amax = typemin(T)
         for m ∈ indices(w, 1)
             amax = max(amax, a[m, n])
         end
         a[lastidx, n] = amax
     end
-    @tturbo for m ∈ indices(w, 1), n ∈ batch
+    @tturbo for m ∈ indices(w, 1), n ∈ indices(input, 2)
         a[m, n] = exp(a[m, n] - a[lastidx, n])
     end
-    @tturbo for n ∈ batch
+    @tturbo for n ∈ indices(input, 2)
         an = zero(T)
         for m ∈ indices(w, 1)
             an += a[m, n]
         end
         a[lastidx, n] = an
     end
-    @tturbo for m ∈ indices(w, 1), n ∈ batch
+    @tturbo for m ∈ indices(w, 1), n ∈ indices(input, 2)
         a[m, n] /= a[lastidx, n]
         a[lastidx, n] = 0
     end
@@ -326,6 +320,9 @@ function Dense(T, k, N; nin, nup, f, w, bias, nextbias, i0 = 1, derivs = 1)
           derivs > 1 ? alloc_b(f, T, k, nup, N) : nothing,
          )
 end
+max_derivs_allocated(::Dense{W, S1, T1, Nothing, Nothing}) where {W, S1, T1} = 0
+max_derivs_allocated(::Dense{W, S1, T1, T2, Nothing}) where {W, S1, T1, T2} = 1
+max_derivs_allocated(::Dense) = 2
 function Dense(l::Dense; N = size(l.a, 2), derivs = 1)
     Dense(eltype(l.a), Int(l.k), N;
           nup = l.nup, f = l.f, w = l.w, i0 = l.i0,
@@ -335,16 +332,17 @@ end
 function Base.show(io::IO, d::Dense)
     println(io, "dense layer: $(Int(d.k)) neurons, activation $(d.f), $(d.bias ? "with" : "without") biases    # $(Int(d.nparams)) parameters")
 end
-mutable struct Net{LS, I, T}
+struct Net{LS, L, I, T}
     nparams::Int
     Din::Int
     layerspec::LS
-    layers
+    layers::L
     input::I
     target::T
 end
 (n::Net)(x) = forward!(n, x)
-(n::Net)(x, input) = forward!(n, x, input)
+(n::Net)(x, input) = forward!(Net(n; input, derivs = 0), x)
+max_derivs_allocated(net::Net) = max_derivs_allocated(first(net.layers))
 function prepare_input(input, d, firstlayerbias; copy_input = true, verbosity = 1)
     if size(input, 1) == d && firstlayerbias
         verbosity > 0 && @info("Appending 1 row to input for biases.")
@@ -379,7 +377,7 @@ net = Net(layers = ((10, softplus, true), (1, identity, true)),
           input = inp, target = targ)
 """
 function Net(; layers, input::AbstractArray{T}, target::AbstractArray{S},
-               bias_adapt_input = true, derivs = 1, copy_input = true, verbosity = 1,
+               bias_adapt_input = true, derivs = 2, copy_input = true, verbosity = 1,
                Din = size(input, 1) - last(first(layers))*(1-bias_adapt_input)) where {T,S}
     if T != S && !(S <: Integer)
         @warn "`input` ($T) and `target` ($S) have not the same type."
@@ -415,6 +413,7 @@ function Net(; layers, input::AbstractArray{T}, target::AbstractArray{S},
     target = StaticStrideArray(copy(target))
     Net(Int(sum(getproperty.(layers, :nparams))), Din, layerspec, layers, input, target)
 end
+Net(net::Net; input = net.input, kwargs...) = Net(; layers = net.layerspec, input, target = net.target, bias_adapt_input = (input !== net.input), copy_input = false, derivs = max_derivs_allocated(net), kwargs...)
 function Base.show(io::IO, n::Net)
     println(io, "Multilayer Perceptron ($(n.nparams) parameters of type $(eltype(n.input)))\ninput dimensions: $(size(n.input, 1)-first(n.layers).bias)")
     for l in n.layers
@@ -427,89 +426,78 @@ end
 ###
 
 propagate!(::Tuple{}, ::Any, ::Any; kwargs...) = nothing
-function propagate!(layers::Tuple, x, input;
-                    batch = indices(input, static(2)), derivs = 0)
+function propagate!(layers::Tuple, x, input; derivs = 0)
     l = first(layers)
     if derivs == 0
-        A_mul_B!(l.a, l.f, getweights(l, x), input, batch)
+        A_mul_B!(l.a, l.f, getweights(l, x), input)
     elseif derivs == 1
-        A_mul_B!(l.a, l.a′, l.f, getweights(l, x), input, batch)
+        A_mul_B!(l.a, l.a′, l.f, getweights(l, x), input)
     else
-        A_mul_B!(l.a, l.a′, l.a′′, l.f, getweights(l, x), input, batch)
+        A_mul_B!(l.a, l.a′, l.a′′, l.f, getweights(l, x), input)
     end
-    propagate!(Base.tail(layers), x, l.a; batch, derivs)
+    propagate!(Base.tail(layers), x, l.a; derivs)
 end
 getweights(l, x::ComponentArray) = getproperty(x, l.w)
 getweights(l, x) = reshape(view(x, l.i0:l.i0+l.nparams-1), Int(l.k), :)
-function forward!(net, x, input;
-                  derivs = 1, copy_input = true, verbosity = 1,
-                  batch = indices(input, static(2)))
-    N = size(input, 2)
-    if derivs > 0 && isnothing(first(net.layers).a′) ||
-        derivs > 1 && isnothing(first(net.layers).g) ||
-        N > size(first(net.layers).a, 2)
-        verbosity > 0 && @info("Allocating for $N input samples and $derivs derivatives.")
-        net.layers = Dense.(net.layers; derivs, N)
-    end
-    if input !== net.input
-        input = prepare_input(input, net.Din, net.layers[1].bias; copy_input, verbosity)
-    end
-    propagate!(net.layers, x, input; batch, derivs)
-    view(last(net.layers).a, :, batch)
+function forward!(net, x, input; derivs = 1)
+    propagate!(net.layers, x, input; derivs)
+    last(net.layers).a
 end
 function checkparams(net, x)
     @assert length(x) == net.nparams "Parameter vector has length $(length(x)) but network has $(net.nparams) parameters."
 end
-function forward!(net, x; derivs = 0, verbosity = 1)
+function forward!(net, x; derivs = 0)
     checkparams(net, x)
-    forward!(net, x, net.input; derivs, verbosity)
+    forward!(net, x, net.input; derivs)
 end
-function crossentropy(a, target::AbstractVector; batch = indices(a, static(2)))
+function crossentropy(a, target::AbstractVector)
     res = zero(eltype(a))
-    @tturbo for j in batch
+    @tturbo for j in indices(target)
         res -= log(a[target[j], j])
     end
     res
 end
-function crossentropy(a, target::AbstractMatrix{T}; batch = indices(a, static(2))) where T
+function crossentropy(a, target::AbstractMatrix{T}) where T
     res = zero(T)
-    @inbounds @fastmath for i in indices(target, 1), j in batch
+    @inbounds @fastmath for i in indices(target, 1), j in indices(target, 2)
         t = target[i, j]
         res -= IfElse.ifelse(isequal(t, zero(T)), zero(T), t * log(a[i, j]))
     end
     res
 end
-function squared_error(a, target; batch = indices(target, static(2)))
+function squared_error(a, target)
     res = zero(eltype(a))
-    @tturbo for i in indices(target, 1), j in batch
+    @tturbo for i in indices(target, 1), j in indices(target, 2)
         res += (target[i, j] - a[i, j])^2
     end
     res
 end
-function _loss(net::Net, x, input = net.input, target = net.target;
-               derivs = 0, forward = true, verbosity = 0, losstype = :mse,
-               batch = indices(input, static(2)), scale = one(eltype(input)),
+function _loss(net::Net, x;
+               derivs = 0, forward = true, losstype = :mse,
+               scale = one(eltype(x)),
                nx = weightnorm(x), maxnorm = Inf, merge = nothing)
-    forward && forward!(net, x, input; batch, derivs, verbosity)
+    input = net.input
+    target = net.target
+    forward && forward!(net, x, input; derivs)
     l = last(net.layers)
     res = if losstype == :crossentropy
-        crossentropy(l.a, target; batch)
+        crossentropy(l.a, target)
     else
-        squared_error(l.a, target; batch)
+        squared_error(l.a, target)
     end
     if nx > maxnorm
         res += (nx - maxnorm)^3/3
     end
     if merge !== nothing
         w1 = getweights(net.layers[merge.layer], x)
-        λ = merge.lambda/2*length(batch)
+        λ = merge.lambda/2*size(input, 2)
         i, j = merge.pair
         for k in indices(w1, 2)
             res += λ * (w1[i, k] - w1[j, k])^2
         end
     end
-    (losstype == :mse || losstype == :crossentropy) && return scale*res/length(batch)
-    losstype == :rmse && return scale*sqrt(res/length(batch))
+    (losstype == :mse || losstype == :crossentropy) && return scale*res/size(input, 2)
+    losstype == :rmse && return scale*sqrt(res/size(input, 2))
     scale*res
 end
 """
@@ -518,98 +506,98 @@ end
 
 Compute the loss of `net` at parameter value `x`.
 """
-function loss(net::Net, x, input = net.input, target = net.target; kwargs...)
+function loss(net::Net, x; input = net.input, target = net.target, kwargs...)
     checkparams(net, x)
-    _loss(net, x, input, target; kwargs...)
+    _net = if input != net.input || target != net.target
+        Net(net; input, target)
+    else
+        net
+    end
+    _loss(_net, x; kwargs...)
 end
-function mse′!(l, target, batch, f)
-    @tturbo for m in indices(target, 1), n in batch
+function mse′!(l, target, f)
+    @tturbo for m in indices(target, 1), n in indices(target, 2)
         l.delta[m, n] = f * l.a′[m, n] * (l.a[m, n] - target[m, n])
     end
 end
-function mse′′!(l, target, batch, f)
-    @tturbo for m in indices(l.delta, 1), n in batch
+function mse′′!(l, target, f)
+    @tturbo for m in indices(l.delta, 1), n in indices(target, 2)
         d = f * (l.a[m, n] - target[m, n])
         l.delta[m, n] = l.a′[m, n] * d
         l.delta′[m, n] = l.a′′[m, n] * d
     end
 end
-function ce′!(l, target::AbstractVector, batch)
+function ce′!(l, target::AbstractVector)
     a = l.a
     T = eltype(l.a)
-    @tturbo for i in 1:l.k, j in batch
+    @tturbo for i in 1:l.k, j in indices(target)
         l.delta[i, j] = a[i, j]
     end
-    @tturbo for j in batch
+    @tturbo for j in indices(target)
         l.delta[target[j], j] -= one(T)
     end
 end
-function ce′!(l, target::AbstractMatrix, batch)
+function ce′!(l, target::AbstractMatrix)
     a = l.a
-    @tturbo for i in indices(target, 1), j in batch
+    @tturbo for i in indices(target, 1), j in indices(target, 2)
         l.delta[i, j] = a[i, j] - target[i, j]
     end
 end
 function backprop!(layers, target, x;
-                   batch = indices(target, static(2)),
                    derivs = 1,
                    scale = one(eltype(x)),
                    losstype = :mse)
     l = last(layers)
     if derivs == 1
         if losstype == :crossentropy
-            ce′!(l, target, batch)
+            ce′!(l, target)
         else
-            mse′!(l, target, batch, 2*scale)
+            mse′!(l, target, 2*scale)
         end
     else
         if losstype == :crossentropy
-            ce′!(l, target, batch)
+            ce′!(l, target)
         else
-            mse′′!(l, target, batch, 2*scale)
+            mse′′!(l, target, 2*scale)
         end
     end
-    backprop!(layers, x; derivs, batch)
+    backprop!(layers, x; derivs)
 end
-function _backprop!(pdelta, pa′, delta, w; batch = indices(pdelta, static(2)))
-    L = size(delta, 1)
-    for k in indices(pdelta, 1), i in batch
+function _backprop!(pdelta, pa′, delta, w)
+    for k in indices(pdelta, 1), i in indices(pdelta, 2)
         deltaki = zero(eltype(pdelta))
-        @tturbo for l in 1:L
+        @tturbo for l in indices(delta, 1)
             deltaki += delta[l, i] * w[l, k]
         end
         pdelta[k, i] = deltaki * pa′[k, i]
     end
 end
-function _backprop!(pdelta, pa′, pdelta′, pa′′, delta, w; batch = indices(pdelta, static(2)))
-    L = size(delta, 1)
-    for k in indices(pdelta, 1), i in batch
+function _backprop!(pdelta, pa′, pdelta′, pa′′, delta, w)
+    for k in indices(pdelta, 1), i in indices(pdelta, 2)
         deltaki = zero(eltype(pdelta))
-        @tturbo for l in 1:L
+        @tturbo for l in indices(delta, 1)
             deltaki += delta[l, i] * w[l, k]
         end
         pdelta[k, i] = deltaki * pa′[k, i]
         pdelta′[k, i] = deltaki * pa′′[k, i]
     end
 end
-function backprop!(layers, x;
-                   batch = indices(first(layers).a, static(2)), derivs = 1)
+function backprop!(layers, x; derivs = 1)
     length(layers) == 1 && return
     l = last(layers)
     front = Base.front(layers)
     w = getweights(l, x)
     prev = last(front)
     if derivs == 1
-        _backprop!(prev.delta, prev.a′, l.delta, w; batch)
+        _backprop!(prev.delta, prev.a′, l.delta, w)
     else
-        _backprop!(prev.delta, prev.a′, prev.delta′, prev.a′′, l.delta, w; batch)
+        _backprop!(prev.delta, prev.a′, prev.delta′, prev.a′′, l.delta, w)
     end
-    backprop!(front, x; derivs, batch)
+    backprop!(front, x; derivs)
 end
 get_input(::Tuple{}, input) = input
 get_input(layers, _) = last(layers).a
-function update_derivatives!(dx, layers, input, x;
-                             batch = indices(input, static(2)))
+function update_derivatives!(dx, layers, input, x)
     l = last(layers)
     dw = getweights(l, dx)
     delta = l.delta
@@ -617,27 +605,26 @@ function update_derivatives!(dx, layers, input, x;
     inp = get_input(front, input)
     @tturbo for k in indices(delta, 1), l in indices(inp, 1)
         wkl = zero(eltype(dx))
-        for i in batch
+        for i in indices(input, 2)
             wkl += delta[k, i] * inp[l, i]
         end
         dw[k, l] = wkl
     end
     length(front) == 0 && return
-    update_derivatives!(dx, front, input, x; batch)
+    update_derivatives!(dx, front, input, x)
 end
 function gradient!(dx, net::Net, x;
-                   forward = true, derivs = 1, verbosity = 1,
+                   forward = true, derivs = 1,
                    scale = one(eltype(x)),
                    losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
-                   batch = indices(net.input, static(2)),
                    nx = weightnorm(x), maxnorm = Inf,
                    merge = nothing)
     input = net.input
     target = net.target
-    forward && forward!(net, x, input; batch, derivs, verbosity)
+    forward && forward!(net, x, input; derivs)
     layers = net.layers
-    backprop!(layers, target, x; batch, derivs, losstype, scale)
-    update_derivatives!(dx, layers, input, x; batch)
+    backprop!(layers, target, x; derivs, losstype, scale)
+    update_derivatives!(dx, layers, input, x)
     if nx > maxnorm
         dx .+= (nx - maxnorm)^2*x/length(x)
     end
@@ -665,19 +652,18 @@ function gradient(net::Net, x; kwargs...)
     dx ./= size(net.input, 2)
 end
 
-function forward_g!(g, prev, layers, x, offset = StaticInt(0);
-                    batch = indices(prev.a, static(2)))
+function forward_g!(g, prev, layers, x, offset = StaticInt(0))
     l = first(layers)
     w = getweights(l, x)
     a′ = prev.a′
     if offset == 0
-        @tturbo for l in 1:l.k, k in indices(g, 2), i in batch
+        @tturbo for l in 1:l.k, k in indices(g, 2), i in indices(a′, 2)
             g[l, k, i] = a′[k, i] * w[l, k]
         end
         offset = l.k
     else
         oldoffset = offset - prev.k
-        @tturbo for l in 1:l.k, k in indices(g, 2), i in batch
+        @tturbo for l in 1:l.k, k in indices(g, 2), i in indices(a′, 2)
             glk = zero(eltype(g))
             for r in 1:prev.k
                 glk += a′[r, i] * w[l, r] * g[r + oldoffset, k, i]
@@ -686,27 +672,27 @@ function forward_g!(g, prev, layers, x, offset = StaticInt(0);
         end
         offset += l.k
     end
-    forward_g!(g, l, Base.tail(layers), x, offset; batch)
+    forward_g!(g, l, Base.tail(layers), x, offset)
 end
 forward_g!(::Any, ::Any, ::Tuple{}, ::Any, ::Any; kwargs...) = nothing
-function compute_g!(layers, x; batch = indices(first(layers).a, static(2)))
+function compute_g!(layers, x)
     tail = Base.tail(layers)
     l = first(layers)
-    forward_g!(l.g, l, tail, x; batch)
-    compute_g!(tail, x; batch)
+    forward_g!(l.g, l, tail, x)
+    compute_g!(tail, x)
 end
 compute_g!(::Tuple{}, ::Any; kwargs...) = nothing
-function mse_backprop_b!(b, g, l, off, goff, batch, f)
+function mse_backprop_b!(b, g, l, off, goff, f)
     a′ = l.a′
     delta′ = l.delta′
     T = eltype(b)
     if l.b === b # output layer
-        @tturbo for k in indices(b, 2), i in batch
+        @tturbo for k in indices(b, 2), i in indices(a′, 2)
             ap = T(a′[k, i])
             b[k, k, i] = delta′[k, i] + f*ap*ap
         end
     else
-        @tturbo for n in indices(l.b, 2), i in batch
+        @tturbo for n in indices(l.b, 2), i in indices(a′, 2)
             ap = a′[n, i]
             tmp = f*ap*ap + delta′[n, i]
             for k in indices(b, 2)
@@ -715,17 +701,17 @@ function mse_backprop_b!(b, g, l, off, goff, batch, f)
         end
     end
 end
-function ce_backprop_b!(b, g, l, off, goff, batch)
+function ce_backprop_b!(b, g, l, off, goff)
     a = l.a
     if l.b === b # output layer
-        @tturbo for k in indices(b, 2), n in indices(b, 2), i in batch
+        @tturbo for k in indices(b, 2), n in indices(b, 2), i in indices(a, 2)
             b[k, n, i] = - a[k, i] * a[n, i]
         end
-        @tturbo for k in indices(b, 2), i in batch
+        @tturbo for k in indices(b, 2), i in indices(a, 2)
             b[k, k, i] += a[k, i]
         end
     else
-        @tturbo for k in indices(b, 2), n in indices(l.b, 2), i in batch
+        @tturbo for k in indices(b, 2), n in indices(l.b, 2), i in indices(a, 2)
             bnki = zero(eltype(b))
             for m in indices(l.b, 2)
                 bnki -= g[m + goff, k, i] * a[m, i] * a[n, i]
@@ -735,7 +721,6 @@ function ce_backprop_b!(b, g, l, off, goff, batch)
     end
 end
 function backprop_b!(b, g, layers, prev, x, offset = StaticInt(0);
-                     batch = indices(prev.a, static(2)),
                      scale = one(eltype(b)), losstype = :mse)
     l = last(layers)
     delta′ = l.delta′
@@ -746,9 +731,9 @@ function backprop_b!(b, g, layers, prev, x, offset = StaticInt(0);
         off = size(b, 1) - offset
         goff = off - size(b, 2)
         if losstype == :crossentropy
-            ce_backprop_b!(b, g, l, off, goff, batch)
+            ce_backprop_b!(b, g, l, off, goff)
         else
-            mse_backprop_b!(b, g, l, off, goff, batch, 2*scale)
+            mse_backprop_b!(b, g, l, off, goff, 2*scale)
         end
     else
         w = getweights(prev, x)
@@ -757,7 +742,7 @@ function backprop_b!(b, g, layers, prev, x, offset = StaticInt(0);
         off = size(b, 1) - offset
         goff = off - size(b, 2)
         if goff < 0
-            @tturbo for n in 1:l.k, k in indices(b, 2), i in batch
+            @tturbo for n in 1:l.k, k in indices(b, 2), i in indices(a′, 2)
                 bki = zero(T)
                 for r in 1:prev.k
                     bki += w[r, n] * b[r + oldoff, k, i]
@@ -768,7 +753,7 @@ function backprop_b!(b, g, layers, prev, x, offset = StaticInt(0);
                 b[k + off, k, i] += delta′[k, i]
             end
         else
-            @tturbo for n in 1:l.k, k in indices(b, 2), i in batch
+            @tturbo for n in 1:l.k, k in indices(b, 2), i in indices(a′, 2)
                 bki = zero(T)
                 for r in 1:prev.k
                     bki += w[r, n] * b[r + oldoff, k, i]
@@ -779,19 +764,18 @@ function backprop_b!(b, g, layers, prev, x, offset = StaticInt(0);
         end
     end
     l.g === g && return
-    backprop_b!(b, g, Base.front(layers), l, x, offset; scale, batch, losstype)
+    backprop_b!(b, g, Base.front(layers), l, x, offset; scale, losstype)
 end
 function compute_b!(front, layers, x; scale = one(eltype(x)),
-                    losstype = :mse, batch = indices(first(layers).a, static(2)))
+                    losstype = :mse)
     l = last(front)
-    backprop_b!(l.b, l.g, layers, nothing, x; batch, losstype, scale)
-    compute_b!(Base.front(front), layers, x; batch, losstype, scale)
+    backprop_b!(l.b, l.g, layers, nothing, x; losstype, scale)
+    compute_b!(Base.front(front), layers, x; losstype, scale)
 end
 compute_b!(::Tuple{}, ::Any, ::Any; kwargs...) = nothing
 # This function is very costly; don't know how to optimize further
 function _hessian!(h, l1, layers, inp1, inp2, prev, x,
-                   off1 = StaticInt(1), off = StaticInt(0), off2 = off1;
-                   batch = indices(inp1, static(2)))
+                   off1 = StaticInt(1), off = StaticInt(0), off2 = off1)
     l2 = first(layers)
     if l1 === l2
         w = getweights(l1, x)
@@ -800,7 +784,7 @@ function _hessian!(h, l1, layers, inp1, inp2, prev, x,
         @tturbo for k in indices(w, 1), j in indices(w, 2),
                    n in indices(w, 1), l in indices(w, 2)
             hkjnl = zero(eltype(w))
-            for i in batch
+            for i in indices(inp1, 2)
                 hkjnl += inp1[j, i] * inp1[l, i] * b[k, n, i]
             end
             hh[k, j, n, l] = hkjnl
@@ -816,14 +800,14 @@ function _hessian!(h, l1, layers, inp1, inp2, prev, x,
             @tturbo for k in indices(w1, 1), j in indices(w1, 2),
                        n in indices(w2, 1), l in indices(w2, 2)
                 hkjnl = zero(eltype(w1))
-                for i in batch
+                for i in indices(inp1, 2)
                     hkjnl += inp1[j, i] * inp2[l, i] * l1.b[n + off, k, i]
                 end
                 hh[k, j, n, l] = hkjnl
             end
             @tturbo for k in indices(w1, 1), j in indices(w1, 2), n in indices(w2, 1)
                 hkjnk = zero(eltype(w1))
-                for i in batch
+                for i in indices(inp1, 2)
                     hkjnk += inp1[j, i] * l2.delta[n, i] * a′[k, i]
                 end
                 hh[k, j, n, k] += hkjnk
@@ -833,7 +817,7 @@ function _hessian!(h, l1, layers, inp1, inp2, prev, x,
             @tturbo for k in indices(w1, 1), j in indices(w1, 2),
                        n in indices(w2, 1), l in indices(w2, 2)
                 hkjnl = zero(eltype(w1))
-                for i in batch
+                for i in indices(inp1, 2)
                     hkjnl += inp1[j, i] * inp2[l, i] * l1.b[n + off, k, i]
                     hkjnl += inp1[j, i] * l2.delta[n, i] * a′[l, i] * l1.g[l + goff, k, i]
                 end
@@ -844,43 +828,40 @@ function _hessian!(h, l1, layers, inp1, inp2, prev, x,
     end
     off1 += StaticInt(1)
     length(layers) == 1 && return off1
-    _hessian!(h, l1, Base.tail(layers), inp1, l2.a, l2, x, off1, off, off2; batch)
+    _hessian!(h, l1, Base.tail(layers), inp1, l2.a, l2, x, off1, off, off2)
 end
-function compute_h!(h, layers, input, x, off1 = StaticInt(1);
-                    batch = indices(input, static(2)))
+function compute_h!(h, layers, input, x, off1 = StaticInt(1))
     l = first(layers)
-    off1 = _hessian!(h, l, layers, input, input, nothing, x, off1; batch)
-    compute_h!(h, Base.tail(layers), l.a, x, off1; batch)
+    off1 = _hessian!(h, l, layers, input, input, nothing, x, off1)
+    compute_h!(h, Base.tail(layers), l.a, x, off1)
 end
 compute_h!(::Any, ::Tuple{}, ::Any, ::Any, ::Any; kwargs...) = nothing
-function copy_h!(h)
-    for ((off1, off2), b) in zip(h.offsets, h.blocks)
+function copy_h!(flat, offsets, blocks)
+    for idx in eachindex(offsets)
+        off1, off2 = offsets[idx]
+        b = blocks[idx]
         N1 = size(b, 1)
         N2 = size(b, 3)
-        @inbounds for i in indices(b, 1), j in indices(b, 2),
-            k in indices(b, 3), l in indices(b, 4)
+        @tturbo for i in indices(b, 1), j in indices(b, 2), k in indices(b, 3), l in indices(b, 4)
             tmp = b[i, j, k, l]
-            h.flat[off1 + (j-1)*N1 + i, off2 + (l-1)*N2 + k] = tmp
-            if off1 != off2
-                h.flat[off2 + (l-1)*N2 + k, off1 + (j-1)*N1 + i] = tmp
-            end
+            flat[off1 + (j-1)*N1 + i, off2 + (l-1)*N2 + k] = tmp
+            flat[off2 + (l-1)*N2 + k, off1 + (j-1)*N1 + i] = tmp
         end
     end
 end
 function hessian!(h, net::Net, x;
-                  forward = true, backprop = true, verbosity = 1,
+                  forward = true, backprop = true,
                   scale = one(eltype(net.input)),
                   losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
-                  batch = indices(net.input, static(2)),
                   nx = weightnorm(x), maxnorm = Inf, merge = nothing)
     input = net.input
     target = net.target
-    forward && forward!(net, x, input; derivs = 2, verbosity, batch)
+    forward && forward!(net, x, input; derivs = 2)
     layers = net.layers
-    backprop && backprop!(layers, target, x; derivs = 2, batch, losstype, scale)
-    compute_g!(layers, x; batch)
-    compute_b!(layers, layers, x; batch, losstype, scale)
-    compute_h!(h, layers, input, x; batch)
+    backprop && backprop!(layers, target, x; derivs = 2, losstype, scale)
+    compute_g!(layers, x)
+    compute_b!(layers, layers, x; losstype, scale)
+    compute_h!(h, layers, input, x)
     if merge !== nothing
         λ = merge.lambda * size(input, 2)
         i, j = merge.pair
@@ -892,7 +873,7 @@ function hessian!(h, net::Net, x;
             hw1[j, k, i, k] -= λ
         end
     end
-    copy_h!(h)
+    copy_h!(h.flat, h.offsets, h.blocks)
     if nx > maxnorm
         h.flat .+= 2*(nx - maxnorm) * x * x'/length(x)^2 + I*(nx - maxnorm)^2/length(x)
     end
@@ -974,55 +955,26 @@ end
 ###
 ### Batch
 ###
-struct FullBatch{T <: AbstractUnitRange}
-    indices::T
-end
-FullBatch(x::AbstractArray) = FullBatch(indices(x, static(2)))
-FullBatch() = x -> FullBatch(x)
-step!(::FullBatch) = nothing
-(f::FullBatch)() = f.indices
-mutable struct MiniBatch{T}
-    indices::T
-    N::Int
+struct FullBatch end
+step!(::Any, ::FullBatch) = nothing
+start_of_epoch(::FullBatch) = true
+mutable struct MiniBatch{T1,T2}
+    input::T1
+    target::T2
     batchsize::Int
     start::Int
 end
-MiniBatch(x::AbstractArray, batchsize) = MiniBatch(indices(x, static(2)),
-                                                   size(x, 2),
-                                                   batchsize,
-                                                   1)
-MiniBatch(batchsize) = x -> MiniBatch(x, batchsize)
-function step!(b::MiniBatch)
-    b.start += b.batchsize
-    b.start ≥ b.N && (b.start = 1)
-    b.start
-end
-(b::MiniBatch)() = static(b.start):static(min(b.N, b.start + b.batchsize - 1))
-mutable struct ScheduledMiniBatch{T,F}
-    minibatch::MiniBatch{T}
-    initial_batchsize::Int
-    epoch::Int
-    scheduler::F
-end
-function ScheduledMiniBatch(x::AbstractArray, initial_batchsize,
-                            scheduler = (epoch, batchsize) -> epoch^2*batchsize)
-    ScheduledMiniBatch(MiniBatch(x, initial_batchsize),
-                       initial_batchsize,
-                       0, scheduler)
-end
-function ScheduledMiniBatch(initial_batchsize,
-                            scheduler = (epoch, batchsize) -> epoch^2*batchsize)
-    x -> ScheduledMiniBatch(x, initial_batchsize, scheduler)
-end
-function step!(b::ScheduledMiniBatch)
-    step!(b.minibatch)
-    if b.minibatch.start == 1
-        b.epoch += 1
-        b.minibatch.batchsize = min(b.minibatch.N,
-                                    b.scheduler(b.epoch, b.initial_batchsize))
+function step!(n, b::MiniBatch)
+    start = b.start
+    batchsize = b.batchsize
+    @views n.input .= b.input[:, start:start+batchsize-1]
+    @views n.target .= b.target[:, start:start+batchsize-1]
+    b.start += batchsize
+    if b.start > size(b.input, 2) - batchsize
+        b.start = 1
     end
 end
-(b::ScheduledMiniBatch)() = b.minibatch()
+start_of_epoch(b::MiniBatch) = b.start == 1
 
 
 ###
@@ -1103,8 +1055,9 @@ function default_hessian_template(p, maxiterations_ode, alg,
     end
 end
 weightnorm(x) = sum(abs2, x)/(2*length(x))
-Base.@kwdef mutable struct OptimizationState{T,N,Tau,M}
+Base.@kwdef mutable struct OptimizationState{T,N,NE,Tau,M,B}
     net::N
+    net_eval::NE = net
     t0::Float64 = time()
     fk::Int = 0
     gk::Int = 0
@@ -1122,20 +1075,31 @@ Base.@kwdef mutable struct OptimizationState{T,N,Tau,M}
     losstype::Symbol = isa(net, NetI) ? :mse : net.layers[end].f == softmax ? :crossentropy : :se
     tauinv::Tau = nothing
     merge::M = nothing
+    batcher::B = FullBatch()
 end
 scale!(x, ::Nothing) = x
 scale!(x, tauinv) = x .*= tauinv
-function OptimizationState(net; maxnorm = Inf, scale = 1., progress_interval = 5., kwargs...)
-    OptimizationState(; net, maxnorm = float(maxnorm), scale = float(scale), progress_interval = float(progress_interval), kwargs...)
+function OptimizationState(net; maxnorm = Inf, scale = 1., progress_interval = 5., net_eval = net, batchsize = nothing, kwargs...)
+    if !isnothing(batchsize) && batchsize != size(net.input, 2)
+        batcher = MiniBatch(net.input, net.target, batchsize, 1)
+        _net = Net(net,
+                   input = net.input[:, 1:batchsize],
+                   target = net.target[:, 1:batchsize],
+                   bias_adapt_input = false)
+    else
+        batcher = FullBatch()
+        _net = net
+    end
+    OptimizationState(; net = _net, net_eval, maxnorm = float(maxnorm), scale = float(scale), progress_interval = float(progress_interval), batcher, kwargs...)
 end
 struct Loss{T,N}
     o::OptimizationState{T,N}
 end
 function (l::Loss)(x; nx = weightnorm(x), forward = true, derivs = 0)
     o = l.o
-    loss = _loss(o.net, x;
+    loss = _loss(o.net_eval, x;
                  losstype = o.losstype, forward, nx, maxnorm = o.maxnorm,
-                 derivs, scale = o.scale, verbosity = o.verbosity, merge = o.merge)
+                 derivs, scale = o.scale, merge = o.merge)
     o.fk += 1
     if loss < o.bestl
         o.k_last_best = o.fk
@@ -1150,9 +1114,10 @@ end
 function (g::Grad)(dx, x; nx = weightnorm(x), derivs = 1, forward = true, kwargs...)
     o = g.l.o
     gradient!(dx, o.net, x; scale = o.scale, derivs, forward, nx, maxnorm = o.maxnorm, merge = o.merge, kwargs...)
-    if forward == true
-        g.l(x; nx, forward = false)
+    if forward == true && start_of_epoch(o.batcher)
+        g.l(x; nx, forward = o.net !== o.net_eval)
     end
+    step!(o.net, o.batcher)
     o.gk += 1
     if o.show_progress
         if time() - o.t0 > o.progress_interval
@@ -1221,7 +1186,7 @@ Keyword arguments:
     maxnorm = Inf                  # constant c in loss formula
 
     loss_scale = 1.                # scale to loss, e.g. for reaching higher accuracy
-    batcher = FullBatch()          # or MiniBatch(batchsize)
+    batchsize = nothing,           # using the full data set in each step when `nothing`
 
     alg = alg_default(p)           # ODE solver: KenCarp58() for length(p) ≤ 64, RK4() otherwise
     maxT = 1e10                    # upper integration limit
@@ -1251,7 +1216,7 @@ function train(net::Net, p;
                maxnorm = Inf,
                loss_scale = 1.,
                verbosity = 1,
-#                batcher = FullBatch(),
+               batchsize = nothing,
                losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
                show_progress = verbosity == 1,
                progress_interval = 5,
@@ -1281,7 +1246,7 @@ function train(net::Net, p;
                                          losstype,
                                          merge,
                                          tauinv = isnothing(tauinv) ? nothing : copy(ComponentArray(tauinv)),
-#                                          batcher = isa(batcher, Function) ? batcher(net.input) : batcher,
+                                         batchsize,
                                          show_progress,
                                          progress_interval = float(progress_interval),
                                          verbosity)
