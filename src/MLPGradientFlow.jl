@@ -291,14 +291,14 @@ StaticStrideArray(x) = StrideArray(x, StaticInt.(size(x)))
 alloc_a′(::Any, T, k, N, nextbias) = StaticStrideArray(zeros(T, k + nextbias, N))
 alloc_a′′(::Any, T, k, N) = StaticStrideArray(zeros(T, k, N))
 function alloc_a′(::Union{typeof(identity), typeof(relu), typeof(softmax)}, T, k, N, nextbias)
-    a′ = StaticStrideArray(ones(Bool, k + nextbias, N))
+    a′ = StaticStrideArray(ones(k + nextbias, N))
     if nextbias
         a′[end, :] .= false
     end
     a′
 end
-alloc_a′′(::Union{typeof(identity), typeof(relu), typeof(softmax)}, T, k, N) = StaticStrideArray(zeros(Bool, k, N))
-alloc_a′′(::typeof(square), T, k, N) = StaticStrideArray(ones(Bool, k, N))
+alloc_a′′(::Union{typeof(identity), typeof(relu), typeof(softmax)}, T, k, N) = StaticStrideArray(zeros(k, N))
+alloc_a′′(::typeof(square), T, k, N) = StaticStrideArray(ones(k, N))
 alloc_delta(::Any, T, k, N) = StaticStrideArray(zeros(T, k, N))
 alloc_delta′(::Any, T, k, N) = StaticStrideArray(zeros(T, k, N))
 alloc_g(::Any, T, k, nup, N) = StaticStrideArray(zeros(T, nup, k, N))
