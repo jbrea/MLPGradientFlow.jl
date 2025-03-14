@@ -1444,7 +1444,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
             end
         end
         if !isnothing(trajectory) && save_everystep
-            push!(trajectory, (trajectory[end][1] + 1, copy(x)))
+            push!(trajectory, (trajectory[end][1] + 1, copy(g!.l.o.bestx)))
         end
     else
         res = nothing
