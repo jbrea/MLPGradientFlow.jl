@@ -1,13 +1,13 @@
 using MLPGradientFlow
-using ForwardDiff, ComponentArrays, Statistics, SpecialFunctions, FiniteDiff, Random
+using ForwardDiff, ComponentArrays, Statistics, SpecialFunctions, Random
 using Distributed
 using Test
 
 Random.seed!(123)
 
 @testset "activation functions" begin
-    import MLPGradientFlow: g, sigmoid, tanh, square, relu, gelu, softplus, Poly, selu, deriv, second_deriv, A_mul_B!, alloc_a′, alloc_a′′
-    for f in (g, sigmoid, square, relu, gelu, tanh, softplus, sigmoid2, Poly(.2, .3, -.3, .4), selu, silu)
+    import MLPGradientFlow: deriv, second_deriv, A_mul_B!, alloc_a′, alloc_a′′
+    for f in (g, exp, sigmoid, square, relu, gelu, tanh, tanh_fast, softplus, sigmoid2, Poly(.2, .3, -.3, .4), selu, silu)
         @info "testing activation function $f."
         inp = [-.2, 3.]'
         y = f.(inp)
@@ -64,6 +64,7 @@ function fw_lossfunc(input, target, f;
                      sizes = nothing, losstype = :mse,
                      scale = 1/size(input, 2),
                      merge = nothing,
+                     maxnorm = Inf,
                      forward = sizes !== nothing ? fw_forward3 : fw_forward)
     x -> begin
         if sizes !== nothing
@@ -78,10 +79,15 @@ function fw_lossfunc(input, target, f;
         end
         if losstype == :crossentropy
             output = softmax(forward(x, f, input))
-            res = -sum(getindex.(Ref(log.(output)),
-                           target, 1:size(input, 2)))*scale
+            res = -sum(getindex.(Ref(log.(output)), target, 1:size(input, 2)))*scale
         else
             res = sum(abs2, forward(x, f, input) - target)*scale
+        end
+        if maxnorm < Inf
+            nx = MLPGradientFlow.weightnorm(x)
+            if nx > maxnorm
+                res += (nx - maxnorm)^3/3
+            end
         end
         if merge !== nothing
             i, j = merge.pair
@@ -116,11 +122,12 @@ end
     x = params(θ...)
     @test fw_forward(θ, f, input) ≈ forward!(n, x)
     fw_loss = fw_lossfunc(input, target, f)
-    @test fw_loss(θ) ≈ loss(n, x, losstype = :mse)
-    @test fw_loss(θ) ≈ loss(n, flatten(θ), losstype = :mse)
+    @test fw_loss(θ) ≈ loss(n, x)
+    @test fw_loss(θ) ≈ loss(n, flatten(θ))
+    nx = MLPGradientFlow.weightnorm(x)
+    @test fw_lossfunc(input, target, f, maxnorm = nx/2)(flatten(θ)) ≈ loss(n, x, maxnorm = nx/2)
     pred = n(x)
-    @test sqrt(sum(abs2, pred - target)/size(target, 2)) ≈ loss(n, x, losstype = :rmse)
-    @test sum(abs2, pred - target)/size(target, 2) ≈ loss(n, x, losstype = :mse)
+    @test sum(abs2, pred - target)/size(target, 2) ≈ loss(n, x)
     θ_wrong = ((randn(4, 2), randn(4)), (randn(2, 4), nothing), (randn(2, 2), nothing))
     @test_throws AssertionError loss(n, params(θ_wrong...))
     @test_throws AssertionError loss(n, randn(10))
@@ -131,7 +138,6 @@ end
 #     @test fw_forward(θ, f, input) ≈ forward!(n, x, input, derivs = 0)
     fw_loss2 = fw_lossfunc(input, target, f)
     @test fw_loss2(θ) ≈ loss(n, x; input, target)
-    @test 8.3*fw_loss2(θ) ≈ loss(n, x; input, target, scale = 8.3)
     merge = (layer = 1, pair = (1, 2), lambda = 1e-2)
     fw_loss3 = fw_lossfunc(input, target, f; merge)
     @test fw_loss3(θ) ≈ loss(n, x; input, target, merge)
@@ -157,15 +163,16 @@ end
     @test G ≈ G2
     fw_loss2 = fw_lossfunc(input, target, f)
     @test G ≈ ForwardDiff.gradient(fw_loss2, flatten(θ))
-    Gs = gradient(n, x, scale = 7.2)
-    @test Gs ≈ 7.2*G
     oldG = copy(G)
     gradient!(G, n, x)
     @test oldG == G/size(input, 2)
-    merge = (layer = 1, pair = (1, 2), lambda = 1e-2)
+    merge = (layer = 1, pair = (1, 2), lambda = 1e-1)
     fw_loss3 = fw_lossfunc(input, target, f; merge)
     G = gradient(n, x; merge)
     @test G ≈ ForwardDiff.gradient(fw_loss3, flatten(θ))
+    nx = MLPGradientFlow.weightnorm(x)
+    fw_loss4 = fw_lossfunc(input, target, f, maxnorm = nx/2)
+    @test gradient(n, x, maxnorm = nx/2) ≈ ForwardDiff.gradient(fw_loss4, flatten(θ))
 end
 
 @testset "hessian" begin
@@ -185,14 +192,15 @@ end
     fw_loss = fw_lossfunc(input, target, f, scale = 1)
     H = hessian(n, x)
     @test H ≈ ForwardDiff.hessian(fw_loss, flatten(θ))/size(input, 2)
-    Hs = hessian(n, x, scale = 3.4)
-    @test Hs ≈ 3.4*H
     merge = (layer = 1, pair = (1, 2), lambda = 1e-2)
     fw_loss3 = fw_lossfunc(input, target, f; merge)
     H = hessian(n, x; merge)
     @test H ≈ ForwardDiff.hessian(fw_loss3, flatten(θ))
     e, v = hessian_spectrum(n, x)
     @test size(v) == (31, 31)
+    nx = MLPGradientFlow.weightnorm(x)
+    fw_loss4 = fw_lossfunc(input, target, f, maxnorm = nx/2)
+    @test hessian(n, x, maxnorm = nx/2) ≈ ForwardDiff.hessian(fw_loss4, flatten(θ))
 end
 
 @testset "ode" begin
@@ -211,11 +219,11 @@ end
         nx = sum(abs2, x)/(2*length(x))
         nx > 70 ? (nx-70)^3/3 : 0.
     end
-    @test f!(x) ≈ loss(n, x, losstype = :se)
+    @test f!(x) ≈ loss(n, x) * size(input, 2)
     xl = 100x
-    @test f!(xl) ≈ loss(n, xl, losstype = :se) + r(xl)
+    @test f!(xl) ≈ (loss(n, xl) + r(xl)) * size(input, 2)
     fw_loss = fw_lossfunc(input, target, f, scale = 1)
-    fw_loss_r = x -> fw_loss(x) + r(x)
+    fw_loss_r = x -> fw_loss(x) + r(x) * size(input, 2)
     G = zero(x)
     g!(G, x)
     @test G ≈ ForwardDiff.gradient(fw_loss_r, flatten(θ))
@@ -240,25 +248,6 @@ end
     @test loss(n, res.ode.u[end]) ≥ loss(n, res.x) - sqrt(eps())
 end
 
-@testset "infinite data" begin
-    inp = randn(2, 10^5)
-    xt = ComponentArray(w1 = randn(2, 2), w2 = randn(1, 2))
-    targ = xt.w2 * softplus.(xt.w1 * inp)
-    n = Net(layers = ((3, softplus, false), (1, identity, false)),
-            input = inp, target = targ)
-    x = random_params(n)
-    ni = NetI(x, xt, softplus)
-    @test loss(ni, x) ≈ loss(n, x) atol = 1e-1
-    gi = gradient(ni, x)
-    @test FiniteDiff.finite_difference_gradient(x -> loss(ni, x), x) ≈ gi atol = 1e-4
-    @test gradient(n, x) ≈ gi atol = 1e-1
-    hi = hessian(ni, x)
-    hfd = FiniteDiff.finite_difference_hessian(x -> loss(ni, x), x)
-    @test hfd ≈ hi atol = 1e-4
-    h = hessian(n, x)
-    @test h ≈ hi atol = 1e-1
-end
-
 @testset "distributed" begin
     import MLPGradientFlow: Net, g, sigmoid, train, random_params, params, gradient, hessian, RK4
     # without bias
@@ -276,41 +265,33 @@ end
     @test res["loss"] ≈ res_distr[i][1]["loss"] atol = 1e-5
 end
 
-# @testset "batch" begin
-#     import MLPGradientFlow: get_functions, Hessian
-#     inp = randn(2, 10^3)
-#     xt = ComponentArray(w1 = randn(2, 2), w2 = randn(1, 2))
-#     targ = xt.w2 * softplus.(xt.w1 * inp)
-#     n = Net(layers = ((3, softplus, false), (1, identity, false)),
-#             input = inp, target = targ)
-#     x = random_params(n)
-#     n2 = Net(layers = ((3, softplus, false), (1, identity, false)),
-#              input = inp[:, 11:20], target = targ[:, 11:20])
-#     n3 = Net(layers = ((3, softplus, false), (1, identity, false)),
-#              input = inp[:, 21:30], target = targ[:, 21:30])
-#     batcher = MiniBatch(inp, 10)
-#     f!, g!, h!, fgh!, fg! = get_functions(n, Inf; hessian_template = Hessian(x),
-#                                           batcher)
-#     dx = zero(x)
-#     g!(dx, x)
-#     @test dx ≈ gradient(n2, x)
-#     @test f!(x) ≈ loss(n2, x, losstype = :se)
-#     H = zeros(length(x), length(x))
-#     h!(H, x)
-#     @test H ≈ hessian(n2, x)
-#     g!(dx, x)
-#     @test dx ≈ gradient(n3, x)
-#     @test f!(x) ≈ loss(n3, x, losstype = :se)
-#     H = zeros(length(x), length(x))
-#     h!(H, x)
-#     @test H ≈ hessian(n3, x)
-#     for _ in 1:100-2
-#         MLPGradientFlow.step!(batcher)
-#     end
-#     @test batcher() == 1:10
-# end
+@testset "batch" begin
+    import MLPGradientFlow: get_functions
+    Random.seed!(12)
+    net = Net(layers = ((2, relu, true), (1, identity, false)), input = randn(2, 30), target = randn(1, 30))
+    funcs_fullbatch = get_functions(net, Inf);
+    funcs_weighted = get_functions(net, Inf, weights = [zeros(10); ones(10); zeros(10)]);
+    funcs_minibatch = get_functions(net, Inf, batchsize = 10);
+    p = random_params(net)
+    @test funcs_fullbatch[1](p) == funcs_minibatch[1](p) # loss evaluation on full batch in both cases
+    dp_fullbatch = zero(p)
+    funcs_fullbatch[2](dp_fullbatch, p)
+    dp_weighted = zero(p)
+    funcs_weighted[2](dp_weighted, p)
+    dp_minibatch = zero(p)
+    dp_tmp = zero(p)
+    funcs_minibatch[2](dp_tmp, p) # first batch
+    dp_minibatch .+= dp_tmp
+    funcs_minibatch[2](dp_tmp, p) # second batch
+    dp_minibatch .+= dp_tmp
+    @test dp_tmp ≈ dp_weighted
+    funcs_minibatch[2](dp_tmp, p) # third batch
+    dp_minibatch .+= dp_tmp
+    @test dp_fullbatch ≈ dp_minibatch
+end
 
 @testset "crossentropy" begin
+    import MLPGradientFlow: NegativeLogLikelihood
     inp = randn(10, 100)
     y = rand(1:10, 100)
     y2 = zero(inp); setindex!.(Ref(y2), 1, y, 1:100)
@@ -321,47 +302,60 @@ end
     θ = ((randn(2, 10), nothing), (randn(10, 2), nothing))
     x = MLPGradientFlow.params(θ...)
     fw_loss = fw_lossfunc(inp, y, (tanh, identity), losstype = :crossentropy)
-    @test loss(net, x, losstype = :crossentropy) ≈ fw_loss(θ)
-    @test loss(net2, x, losstype = :crossentropy) ≈ fw_loss(θ)
-    dx = gradient(net, x, losstype = :crossentropy)
-    dx2 = gradient(net2, x, losstype = :crossentropy)
+    @test loss(net, x, losstype = NegativeLogLikelihood()) ≈ fw_loss(θ)
+    @test loss(net2, x, losstype = NegativeLogLikelihood()) ≈ fw_loss(θ)
+    dx = gradient(net, x, losstype = NegativeLogLikelihood())
+    dx2 = gradient(net2, x, losstype = NegativeLogLikelihood())
     @test dx ≈ ForwardDiff.gradient(fw_loss, flatten(θ))
     @test dx2 ≈ dx
-    h = hessian(net, x, losstype = :crossentropy)
-    h2 = hessian(net2, x, losstype = :crossentropy)
+    h = hessian(net, x, losstype = NegativeLogLikelihood())
+    h2 = hessian(net2, x, losstype = NegativeLogLikelihood())
     @test h ≈ ForwardDiff.hessian(fw_loss, flatten(θ))
     @test h ≈ h2
 end
 
-@testset "approximators" begin
-    import MLPGradientFlow: glorot_normal
-    xt = ComponentArray(w1 = glorot_normal(2, 3), w2 = glorot_normal(3, 1))
-    x = ComponentArray(w1 = glorot_normal(2, 4), w2 = glorot_normal(4, 1))
-    MLPGradientFlow.TOL.atol[] = 1e-14
-    MLPGradientFlow.TOL.rtol[] = 1e-14
-    for f in (g, sigmoid, gelu, MLPGradientFlow.tanh, softplus, sigmoid2)
-        @show f
-        ni = NetI(x, xt, f)
-        ax = if f ∈ (relu, sigmoid2)
-            Val(f)
-        else
-            load_potential_approximator(f)
-        end
-        ni2 = NetI(x, xt, ax)
-        l1 = loss(ni, x)
-        l2 = loss(ni2, x)
-        g1 = gradient(ni, x)
-        g2 = gradient(ni2, x)
-        h1 = hessian(ni, x)
-        h2 = hessian(ni2, x)
-        @show abs(l1 - l2) sqrt(sum(abs2, g1 - g2)) sqrt(sum(abs2, h1 - h2))
-        if f ≠ MLPGradientFlow.tanh # broken
-            @test l1 ≈ l2 atol = 1e-4
-        end
-        @test g1 ≈ g2 atol = 1e-3
-        if f ≠ relu # the integrator is wrong for relu because of derivative of heaviside
-            @test h1 ≈ h2 atol = 2e-1
+@testset "teacher net" begin
+    input = randn(2, 10)
+    teacher = TeacherNet(; layers = ((2, softplus, true), (1, identity, true)), input)
+    @test teacher.net.target == teacher(input)
+end
+
+@testset "tauinv" begin
+    net = Net(layers = ((2, relu, true), (1, identity, true)), input = randn(2, 10), target = randn(1, 10))
+    p = random_params(net)
+    tauinv = zero(p) # nothing moves
+    res = train(net, p; tauinv, maxiterations_ode = 100, maxiterations_optim = 0)
+    @test params(res["x"]) == p
+    tauinv.w1[:, end] .= 1 # only biases of input layer move
+    res = train(net, p; tauinv, maxiterations_ode = 100, maxiterations_optim = 0)
+    @test params(res["x"]).w2 == p.w2
+    @test params(res["x"]).w1[:, 1:end-1] == p.w1[:, 1:end-1]
+    @test params(res["x"]).w1[:, end] ≠ p.w1[:, end]
+end
+
+@testset "standard normal input" begin
+    input = randn(1, 10^4)
+    for b1 in (true, false), b2 in (true, false)
+        teacher = TeacherNet(; layers = ((2, softplus, true), (1, identity, true)), input)
+        teacher.p .= randn(length(teacher.p))
+        target = teacher(input)
+        teacher.net.target .= target
+        student = Net(; layers = ((2, tanh_fast, b1), (1, identity, b2)), input, target)
+        infinite_student = gauss_hermite_net(student, teacher)
+        p = random_params(student)
+        p .= randn(length(p))
+        @test loss(student, p) ≈ loss(infinite_student, p) atol = 1e-1
+        @test gradient(student, p) ≈ gradient(infinite_student, p) atol = 1e-1
+        @test hessian(student, p) ≈ hessian(infinite_student, p) atol = 5e-1
+        neti = NetI(teacher, student)
+        @test loss(neti, p) ≈ loss(infinite_student, p)
+        @test gradient(neti, p) ≈ gradient(infinite_student, p)
+        @test hessian(neti, p) ≈ hessian(infinite_student, p)
+        if b1 == true && b2 == true
+            res2 = train(neti, p, maxT = 100, maxiterations_optim = 0)
+            res1 = train(infinite_student, p, maxT = 100, tauinv = 1/MLPGradientFlow.n_samples(infinite_student), maxtime_ode = 10, maxiterations_optim = 0)
+            @test res1["loss"] ≈ res2["loss"]
+            @test params(res1["x"]) ≈ params(res2["x"])
         end
     end
 end
-

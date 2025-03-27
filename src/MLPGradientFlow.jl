@@ -2,14 +2,14 @@ module MLPGradientFlow
 
 using ComponentArrays, LoopVectorization, OrdinaryDiffEq, ArrayInterface, Static,
       Optim, IfElse, LinearAlgebra, Distributed, Dates, Printf, Pkg,
-      OrderedCollections, SLEEFPirates, LazyArtifacts, Random,
-      StrideArraysCore, Pickle, Cuba, HCubature, ForwardDiff, SpecialFunctions
+      OrderedCollections, SLEEFPirates, Random, SpecialFunctions, Pickle, StrideArraysCore
+using FastGaussQuadrature
 using NLopt, Sundials
 
-export Net, NetI, Adam, Descent, FullBatch, MiniBatch
-export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict
-export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube, Poly, selu, silu
-export load_potential_approximator, pickle, unpickle
+export Net, NetI, TeacherNet, Adam, Descent, FullBatch, MiniBatch
+export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict, gauss_hermite_net
+export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube, Poly, selu, silu, tanh_fast
+export pickle, unpickle
 
 ###
 ### Activation Functions
@@ -64,8 +64,8 @@ selu′′(x, y, y′) = selu′′(x)
 selu′′(x::T) where T = IfElse.ifelse(x > 0, zero(T), T(1.05070098*1.67326324) * exp(x))
 
 const sigmoid = sigmoid_fast
-deriv(::typeof(sigmoid)) = sigmoid′
-second_deriv(::typeof(sigmoid)) = sigmoid′′
+deriv(::typeof(sigmoid_fast)) = sigmoid′
+second_deriv(::typeof(sigmoid_fast)) = sigmoid′′
 sigmoid′(x) = sigmoid′(x, sigmoid(x))
 sigmoid′(x, y) = y * (1 - y)
 function sigmoid′′(x)
@@ -106,7 +106,7 @@ g′′(x) = 16*sigmoid′′(4x) + sigmoid′(x)
 
 const invsqrt2 = 1/sqrt(2)
 const invsqrtπ = 1/sqrt(π)
-gelu(x) = 0.5 * x * (1 + sigmoid2(x))
+const gelu = SLEEFPirates.gelu
 gelu′(x, y) = IfElse.ifelse(x == 0, 0.5, y/x) + x*invsqrtπ*invsqrt2*Base.exp(-x^2/2)
 gelu′(x) = gelu′(x, gelu(x))
 gelu′′(x) = invsqrtπ*invsqrt2*(2 - x^2)*Base.exp(-x^2/2)
@@ -121,7 +121,16 @@ relu′(x, y) = x > 0
 relu′(x) = x > 0
 relu′′(::T) where T = zero(T)
 
-const tanh = tanh_fast
+deriv(::typeof(tanh_fast)) = tanh_fast′
+second_deriv(::typeof(tanh_fast)) = tanh_fast′′
+tanh_fast′(x, y) = 1 - y^2
+tanh_fast′(x) = tanh_fast′(x, tanh_fast(x))
+tanh_fast′′(x, y, y′) = -2y*y′
+function tanh_fast′′(x)
+    y = tanh_fast(x)
+    tanh_fast′′(x, y, tanh_fast′(x, y))
+end
+
 deriv(::typeof(tanh)) = tanh′
 second_deriv(::typeof(tanh)) = tanh′′
 tanh′(x, y) = 1 - y^2
@@ -132,28 +141,25 @@ function tanh′′(x)
     tanh′′(x, y, tanh′(x, y))
 end
 
-sigmoid2(x::T) where T = erf(x * 0.7071067811865476)
+sigmoid2(x::T) where T = erf(x * T(0.7071067811865476))
 deriv(::typeof(sigmoid2)) = sigmoid2′
 second_deriv(::typeof(sigmoid2)) = sigmoid2′′
-sigmoid2′(x::T) where T = 0.7978845608028654 * Base.exp(-x^2/2)
+sigmoid2′(x::T) where T = T(0.7978845608028654) * Base.exp(-x^2/2)
 sigmoid2′(x, y) = sigmoid2′(x)
 sigmoid2′′(x, y, y′) = -x*y′
-sigmoid2′′(x) = sigmoid2′′(x, nothing, sigmoid2′(x))
+sigmoid2′′(x::T) where T = sigmoid2′′(x, zero(T), sigmoid2′(x))
 
-function deriv(f; multiargs = true)
-    if multiargs
-        (x, y) -> ForwardDiff.derivative(f, x)
-    else
-        x -> ForwardDiff.derivative(f, x)
-    end
-end
-function second_deriv(f; multiargs = true)
-    if multiargs
-        (x, y, y′) -> ForwardDiff.derivative(x -> ForwardDiff.derivative(f, x), x)
-    else
-        x -> ForwardDiff.derivative(x -> ForwardDiff.derivative(f, x), x)
-    end
-end
+deriv(::typeof(identity)) = identity′
+second_deriv(::typeof(identity)) = identity′′
+identity′(x::T) where T = one(T)
+identity′(x::T, y) where T = one(T)
+identity′′(x::T) where T = zero(T)
+identity′′(x::T, y, y′) where T = zero(T)
+
+deriv(::typeof(exp)) = exp
+second_deriv(::typeof(exp)) = exp
+Base.exp(x, _) = exp(x)
+Base.exp(x, _, _) = exp(x)
 
 @inline function A_mul_B!(a::AbstractMatrix{T}, f, w, input) where T
     @tturbo for m ∈ indices(w, 1), n ∈ indices(input, 2)
@@ -261,13 +267,6 @@ A_mul_B!(a::AbstractMatrix{T}, a′, ::typeof(softmax), w, input) where T =
 end
 
 ###
-### gaussian input
-###
-
-include("gaussian_input.jl")
-
-
-###
 ### Net
 ###
 
@@ -332,13 +331,14 @@ end
 function Base.show(io::IO, d::Dense)
     println(io, "dense layer: $(Int(d.k)) neurons, activation $(d.f), $(d.bias ? "with" : "without") biases    # $(Int(d.nparams)) parameters")
 end
-struct Net{LS, L, I, T}
+struct Net{LS, L, I, T, W}
     nparams::Int
     Din::Int
     layerspec::LS
     layers::L
     input::I
     target::T
+    weights::W
 end
 (n::Net)(x) = forward!(n, x)
 (n::Net)(x, input) = forward!(Net(n; input, derivs = 0), x)
@@ -355,8 +355,8 @@ function prepare_input(input, d, firstlayerbias; copy_input = true, verbosity = 
     end
 end
 """
-    Net(; layers, input, target,
-          bias_adapt_input = true, derivs = 1, copy_input = true, verbosity = 1,
+    Net(; layers, input, target, weights = nothing,
+          bias_adapt_input = true, derivs = 2, copy_input = true, verbosity = 1,
           Din = size(input, 1) - last(first(layers))*(1-bias_adapt_input))
 
 
@@ -365,8 +365,9 @@ end
               ...)
     input  # Dᵢₙ × N matrix
     target # Dₒᵤₜ × N matrix
+    weights # nothing or N array
     bias_adapt_input = true # adds a row of 1s to the input
-    derivs = 1              # allocate memory for derivs derivatives (0, 1, 2)
+    derivs = 2              # allocate memory for derivs derivatives (0, 1, 2)
     copy_input = true       # copy the input when creating the net
 
 ### Example
@@ -377,6 +378,7 @@ net = Net(layers = ((10, softplus, true), (1, identity, true)),
           input = inp, target = targ)
 """
 function Net(; layers, input::AbstractArray{T}, target::AbstractArray{S},
+               weights = nothing,
                bias_adapt_input = true, derivs = 2, copy_input = true, verbosity = 1,
                Din = size(input, 1) - last(first(layers))*(1-bias_adapt_input)) where {T,S}
     if T != S && !(S <: Integer)
@@ -411,15 +413,61 @@ function Net(; layers, input::AbstractArray{T}, target::AbstractArray{S},
                     end
                for (i, (k, f, bias)) in pairs(layerspec)]...)
     target = StaticStrideArray(copy(target))
-    Net(Int(sum(getproperty.(layers, :nparams))), Din, layerspec, layers, input, target)
+    Net(Int(sum(getproperty.(layers, :nparams))), Din, layerspec, layers, input, target, weights)
 end
-Net(net::Net; input = net.input, kwargs...) = Net(; layers = net.layerspec, input, target = net.target, bias_adapt_input = (input !== net.input), copy_input = false, derivs = max_derivs_allocated(net), kwargs...)
+Net(net::Net; input = net.input, kwargs...) = Net(; layers = net.layerspec, input, target = net.target, bias_adapt_input = (input !== net.input), copy_input = false, derivs = max_derivs_allocated(net), weights = net.weights, kwargs...)
 function Base.show(io::IO, n::Net)
     println(io, "Multilayer Perceptron ($(n.nparams) parameters of type $(eltype(n.input)))\ninput dimensions: $(size(n.input, 1)-first(n.layers).bias)")
     for l in n.layers
         show(io, l)
     end
 end
+
+struct TeacherNet{N,P}
+    net::N
+    p::P
+end
+"""
+    TeacherNet(; p = nothing, input, kwargs...)
+
+Creates a network with parameters `p` attached. If `p == nothing`, [`random_params`](@href) are generated.
+A `TeacherNet` is a callable object that returns the target given some input.
+
+# Example
+```
+julia> input = randn(3, 10^4);
+
+julia> teacher = TeacherNet(; layers = ((8, softplus, true), (1, identity, true)), input);
+
+julia> target = teacher(input);
+
+julia> new_input = randn(3, 10^3);
+
+julia> new_target = teacher(new_input);
+```
+"""
+function TeacherNet(; p = nothing, input, kwargs...)
+    target = zeros(1, size(input, 2))
+    net = Net(; input, target, kwargs..., derivs = 0)
+    if p === nothing
+        p = random_params(net)
+    end
+    net.target .= net(p)
+    TeacherNet(net, p)
+end
+function Base.show(io::IO, teacher::TeacherNet)
+    println(io, "TeacherNet")
+    show(io, teacher.net)
+end
+(n::TeacherNet)(inp) = n.net(n.p, inp)
+
+###
+### gaussian input
+###
+
+include("normal_integrals.jl")
+include("gaussian_input.jl")
+
 
 ###
 ### forward - backward
@@ -443,21 +491,26 @@ function forward!(net, x, input; derivs = 1)
     propagate!(net.layers, x, input; derivs)
     last(net.layers).a
 end
+nparams(net::Net) = net.nparams
+nparams(net::NetI) = net.student.nparams
 function checkparams(net, x)
-    @assert length(x) == net.nparams "Parameter vector has length $(length(x)) but network has $(net.nparams) parameters."
+    @assert length(x) == nparams(net) "Parameter vector has length $(length(x)) but network has $(nparams(net)) parameters."
 end
 function forward!(net, x; derivs = 0)
     checkparams(net, x)
     forward!(net, x, net.input; derivs)
 end
-function crossentropy(a, target::AbstractVector)
+
+struct NegativeLogLikelihood end
+struct MSE end
+function ℓ(::NegativeLogLikelihood, a, target::AbstractVector, ::Nothing)
     res = zero(eltype(a))
     @tturbo for j in indices(target)
         res -= log(a[target[j], j])
     end
     res
 end
-function crossentropy(a, target::AbstractMatrix{T}) where T
+function ℓ(::NegativeLogLikelihood, a, target::AbstractMatrix{T}, ::Nothing) where T
     res = zero(T)
     @inbounds @fastmath for i in indices(target, 1), j in indices(target, 2)
         t = target[i, j]
@@ -465,44 +518,64 @@ function crossentropy(a, target::AbstractMatrix{T}) where T
     end
     res
 end
-function squared_error(a, target)
+function ℓ(::NegativeLogLikelihood, a, target::AbstractVector, weights)
+    res = zero(eltype(a))
+    @tturbo for j in indices(target)
+        res -= log(a[target[j], j]) * weights[j]
+    end
+    res
+end
+function ℓ(::NegativeLogLikelihood, a, target::AbstractMatrix{T}, weights) where T
+    res = zero(T)
+    @inbounds @fastmath for i in indices(target, 1), j in indices(target, 2)
+        t = target[i, j]
+        res -= IfElse.ifelse(isequal(t, zero(T)), zero(T), t * log(a[i, j])) * weights[j]
+    end
+    res
+end
+function ℓ(::MSE, a, target, ::Nothing)
     res = zero(eltype(a))
     @tturbo for i in indices(target, 1), j in indices(target, 2)
         res += (target[i, j] - a[i, j])^2
     end
     res
 end
-function _loss(net::Net, x;
-               derivs = 0, forward = true, losstype = :mse,
-               scale = one(eltype(x)),
-               nx = weightnorm(x), maxnorm = Inf, merge = nothing)
+function ℓ(::MSE, a, target, weights)
+    res = zero(eltype(a))
+    @tturbo for i in indices(target, 1), j in indices(target, 2)
+        res += (target[i, j] - a[i, j])^2 * weights[j]
+    end
+    res
+end
+function __loss(net::Net, x; forward = true, derivs = 0, weights = net.weights, losstype = MSE())
     input = net.input
     target = net.target
     forward && forward!(net, x, input; derivs)
     l = last(net.layers)
-    res = if losstype == :crossentropy
-        crossentropy(l.a, target)
-    else
-        squared_error(l.a, target)
-    end
+    ℓ(losstype, l.a, target, weights)
+end
+function _loss(net, x;
+               forward = true, weights = isa(net, Net) ? net.weights : nothing,
+               losstype = MSE(),
+               derivs = 0,
+               nx = weightnorm(x), maxnorm = Inf, merge = nothing)
+    res = __loss(net, x; forward, weights, losstype, derivs)
     if nx > maxnorm
-        res += (nx - maxnorm)^3/3
+        res += (nx - maxnorm)^3/3 * n_samples(net)
     end
     if merge !== nothing
         w1 = getweights(net.layers[merge.layer], x)
-        λ = merge.lambda/2*size(input, 2)
+        λ = merge.lambda/2 * n_samples(net)
         i, j = merge.pair
         for k in indices(w1, 2)
             res += λ * (w1[i, k] - w1[j, k])^2
         end
     end
-    (losstype == :mse || losstype == :crossentropy) && return scale*res/size(input, 2)
-    losstype == :rmse && return scale*sqrt(res/size(input, 2))
-    scale*res
+    res
 end
 """
     loss(net, x, input = net.input, target = net.target;
-         verbosity = 1, losstype = :mse)
+         verbosity = 1, losstype = MSE())
 
 Compute the loss of `net` at parameter value `x`.
 """
@@ -513,21 +586,21 @@ function loss(net::Net, x; input = net.input, target = net.target, kwargs...)
     else
         net
     end
-    _loss(_net, x; kwargs...)
+    _loss(_net, x; kwargs...)/size(input, 2)
 end
-function mse′!(l, target, f)
+function ℓ′!(::MSE, l, target)
     @tturbo for m in indices(target, 1), n in indices(target, 2)
-        l.delta[m, n] = f * l.a′[m, n] * (l.a[m, n] - target[m, n])
+        l.delta[m, n] = 2 * l.a′[m, n] * (l.a[m, n] - target[m, n])
     end
 end
-function mse′′!(l, target, f)
+function ℓ′′!(::MSE, l, target)
     @tturbo for m in indices(l.delta, 1), n in indices(target, 2)
-        d = f * (l.a[m, n] - target[m, n])
+        d = 2 * (l.a[m, n] - target[m, n])
         l.delta[m, n] = l.a′[m, n] * d
         l.delta′[m, n] = l.a′′[m, n] * d
     end
 end
-function ce′!(l, target::AbstractVector)
+function ℓ′!(::NegativeLogLikelihood, l, target::AbstractVector)
     a = l.a
     T = eltype(l.a)
     @tturbo for i in 1:l.k, j in indices(target)
@@ -537,29 +610,21 @@ function ce′!(l, target::AbstractVector)
         l.delta[target[j], j] -= one(T)
     end
 end
-function ce′!(l, target::AbstractMatrix)
+function ℓ′!(::NegativeLogLikelihood, l, target::AbstractMatrix)
     a = l.a
     @tturbo for i in indices(target, 1), j in indices(target, 2)
         l.delta[i, j] = a[i, j] - target[i, j]
     end
 end
-function backprop!(layers, target, x;
+ℓ′′!(lt::NegativeLogLikelihood, l, target) = ℓ′!(lt, l, target)
+function backprop!(layers, target, x::AbstractArray{T};
                    derivs = 1,
-                   scale = one(eltype(x)),
-                   losstype = :mse)
+                   losstype = MSE()) where T
     l = last(layers)
     if derivs == 1
-        if losstype == :crossentropy
-            ce′!(l, target)
-        else
-            mse′!(l, target, 2*scale)
-        end
+        ℓ′!(losstype, l, target)
     else
-        if losstype == :crossentropy
-            ce′!(l, target)
-        else
-            mse′′!(l, target, 2*scale)
-        end
+        ℓ′′!(losstype, l, target)
     end
     backprop!(layers, x; derivs)
 end
@@ -597,41 +662,58 @@ function backprop!(layers, x; derivs = 1)
 end
 get_input(::Tuple{}, input) = input
 get_input(layers, _) = last(layers).a
-function update_derivatives!(dx, layers, input, x)
+function _update_derivatives!(dw, delta, inp, ::Nothing)
+    @tturbo for k in indices(delta, 1), l in indices(inp, 1)
+        wkl = zero(eltype(dw))
+        for i in indices(inp, 2)
+            wkl += delta[k, i] * inp[l, i]
+        end
+        dw[k, l] = wkl
+    end
+end
+function _update_derivatives!(dw, delta, inp, weights)
+    @tturbo for k in indices(delta, 1), l in indices(inp, 1)
+        wkl = zero(eltype(dw))
+        for i in indices(inp, 2)
+            wkl += delta[k, i] * inp[l, i] * weights[i]
+        end
+        dw[k, l] = wkl
+    end
+end
+function update_derivatives!(dx, layers, input, x, weights)
     l = last(layers)
     dw = getweights(l, dx)
     delta = l.delta
     front = Base.front(layers)
     inp = get_input(front, input)
-    @tturbo for k in indices(delta, 1), l in indices(inp, 1)
-        wkl = zero(eltype(dx))
-        for i in indices(input, 2)
-            wkl += delta[k, i] * inp[l, i]
-        end
-        dw[k, l] = wkl
-    end
+    _update_derivatives!(dw, delta, inp, weights)
     length(front) == 0 && return
-    update_derivatives!(dx, front, input, x)
+    update_derivatives!(dx, front, input, x, weights)
 end
-function gradient!(dx, net::Net, x;
-                   forward = true, derivs = 1,
-                   scale = one(eltype(x)),
-                   losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
-                   nx = weightnorm(x), maxnorm = Inf,
-                   merge = nothing)
+function _gradient!(dx, net::Net, x; forward = true, derivs = 1, weights = net.weights, losstype = MSE())
     input = net.input
     target = net.target
     forward && forward!(net, x, input; derivs)
     layers = net.layers
-    backprop!(layers, target, x; derivs, losstype, scale)
-    update_derivatives!(dx, layers, input, x)
+    backprop!(layers, target, x; derivs, losstype)
+    update_derivatives!(dx, layers, input, x, weights)
+end
+function gradient!(dx, net, x;
+                   forward = true,
+                   nx = weightnorm(x),
+                   maxnorm = Inf,
+                   merge = nothing,
+                   weights = net.weights,
+                   losstype = MSE(),
+                   derivs = 1)
+    _gradient!(dx, net, x; forward, weights, derivs, losstype)
     if nx > maxnorm
-        dx .+= (nx - maxnorm)^2*x/length(x)
+        dx .+= (nx - maxnorm)^2*x/length(x) * n_samples(net)
     end
     if merge !== nothing
         dw = getweights(net.layers[merge.layer], dx)
         w = getweights(net.layers[merge.layer], x)
-        λ = merge.lambda * size(input, 2)
+        λ = merge.lambda * n_samples(net)
         i, j = merge.pair
         for k in indices(w, 2)
             dw[i, k] -= λ * (w[j, k] - w[i, k])
@@ -682,26 +764,26 @@ function compute_g!(layers, x)
     compute_g!(tail, x)
 end
 compute_g!(::Tuple{}, ::Any; kwargs...) = nothing
-function mse_backprop_b!(b, g, l, off, goff, f)
+function ℓ_backprop_b!(::MSE, b, g, l, off, goff)
     a′ = l.a′
     delta′ = l.delta′
     T = eltype(b)
     if l.b === b # output layer
         @tturbo for k in indices(b, 2), i in indices(a′, 2)
             ap = T(a′[k, i])
-            b[k, k, i] = delta′[k, i] + f*ap*ap
+            b[k, k, i] = delta′[k, i] + 2*ap*ap
         end
     else
         @tturbo for n in indices(l.b, 2), i in indices(a′, 2)
             ap = a′[n, i]
-            tmp = f*ap*ap + delta′[n, i]
+            tmp = 2*ap*ap + delta′[n, i]
             for k in indices(b, 2)
                 b[n + off, k, i] = g[n + goff, k, i] * tmp
             end
         end
     end
 end
-function ce_backprop_b!(b, g, l, off, goff)
+function ℓ_backprop_b!(::NegativeLogLikelihood, b, g, l, off, goff)
     a = l.a
     if l.b === b # output layer
         @tturbo for k in indices(b, 2), n in indices(b, 2), i in indices(a, 2)
@@ -720,21 +802,16 @@ function ce_backprop_b!(b, g, l, off, goff)
         end
     end
 end
-function backprop_b!(b, g, layers, prev, x, offset = StaticInt(0);
-                     scale = one(eltype(b)), losstype = :mse)
+function backprop_b!(b, g, layers, prev, x::AbstractArray{T}, offset = StaticInt(0);
+                     losstype = MSE()) where T
     l = last(layers)
     delta′ = l.delta′
     a′ = l.a′
-    T = eltype(b)
     if prev === nothing
         offset = l.k
         off = size(b, 1) - offset
         goff = off - size(b, 2)
-        if losstype == :crossentropy
-            ce_backprop_b!(b, g, l, off, goff)
-        else
-            mse_backprop_b!(b, g, l, off, goff, 2*scale)
-        end
+        ℓ_backprop_b!(losstype, b, g, l, off, goff)
     else
         w = getweights(prev, x)
         oldoff = size(b, 1) - offset
@@ -764,31 +841,83 @@ function backprop_b!(b, g, layers, prev, x, offset = StaticInt(0);
         end
     end
     l.g === g && return
-    backprop_b!(b, g, Base.front(layers), l, x, offset; scale, losstype)
+    backprop_b!(b, g, Base.front(layers), l, x, offset; losstype)
 end
-function compute_b!(front, layers, x; scale = one(eltype(x)),
-                    losstype = :mse)
+function compute_b!(front, layers, x; losstype = MSE())
     l = last(front)
-    backprop_b!(l.b, l.g, layers, nothing, x; losstype, scale)
-    compute_b!(Base.front(front), layers, x; losstype, scale)
+    backprop_b!(l.b, l.g, layers, nothing, x; losstype)
+    compute_b!(Base.front(front), layers, x; losstype)
 end
 compute_b!(::Tuple{}, ::Any, ::Any; kwargs...) = nothing
 # This function is very costly; don't know how to optimize further
+function _update_hessian!(hh, w1, w2, inp1, inp2, b, off, ::Nothing)
+    @tturbo for k in indices(w1, 1), j in indices(w1, 2),
+               n in indices(w2, 1), l in indices(w2, 2)
+        hkjnl = zero(eltype(w1))
+        for i in indices(inp1, 2)
+            hkjnl += inp1[j, i] * inp2[l, i] * b[n + off, k, i]
+        end
+        hh[k, j, n, l] = hkjnl
+    end
+end
+function _update_hessian2!(hh, w1, w2, inp1, delta, a′, ::Nothing)
+    @tturbo for k in indices(w1, 1), j in indices(w1, 2), n in indices(w2, 1)
+        hkjnk = zero(eltype(w1))
+        for i in indices(inp1, 2)
+            hkjnk += inp1[j, i] * delta[n, i] * a′[k, i]
+        end
+        hh[k, j, n, k] += hkjnk
+    end
+end
+function _update_hessian3!(hh, w1, w2, inp1, inp2, delta, b, a′, g, off, goff, ::Nothing)
+    @tturbo for k in indices(w1, 1), j in indices(w1, 2),
+               n in indices(w2, 1), l in indices(w2, 2)
+        hkjnl = zero(eltype(w1))
+        for i in indices(inp1, 2)
+            hkjnl += inp1[j, i] * inp2[l, i] * b[n + off, k, i]
+            hkjnl += inp1[j, i] * delta[n, i] * a′[l, i] * g[l + goff, k, i]
+        end
+        hh[k, j, n, l] = hkjnl
+    end
+end
+function _update_hessian!(hh, w1, w2, inp1, inp2, b, off, weights)
+    @tturbo for k in indices(w1, 1), j in indices(w1, 2),
+               n in indices(w2, 1), l in indices(w2, 2)
+        hkjnl = zero(eltype(w1))
+        for i in indices(inp1, 2)
+            hkjnl += inp1[j, i] * inp2[l, i] * b[n + off, k, i] * weights[i]
+        end
+        hh[k, j, n, l] = hkjnl
+    end
+end
+function _update_hessian2!(hh, w1, w2, inp1, delta, a′, weights)
+    @tturbo for k in indices(w1, 1), j in indices(w1, 2), n in indices(w2, 1)
+        hkjnk = zero(eltype(w1))
+        for i in indices(inp1, 2)
+            hkjnk += inp1[j, i] * delta[n, i] * a′[k, i] * weights[i]
+        end
+        hh[k, j, n, k] += hkjnk
+    end
+end
+function _update_hessian3!(hh, w1, w2, inp1, inp2, delta, b, a′, g, off, goff, weights)
+    @tturbo for k in indices(w1, 1), j in indices(w1, 2),
+               n in indices(w2, 1), l in indices(w2, 2)
+        hkjnl = zero(eltype(w1))
+        for i in indices(inp1, 2)
+            hkjnl += inp1[j, i] * inp2[l, i] * b[n + off, k, i] * weights[i]
+            hkjnl += inp1[j, i] * delta[n, i] * a′[l, i] * g[l + goff, k, i] * weights[i]
+        end
+        hh[k, j, n, l] = hkjnl
+    end
+end
 function _hessian!(h, l1, layers, inp1, inp2, prev, x,
-                   off1 = StaticInt(1), off = StaticInt(0), off2 = off1)
+                   off1 = StaticInt(1), off = StaticInt(0), off2 = off1, weights = nothing)
     l2 = first(layers)
     if l1 === l2
         w = getweights(l1, x)
         b = l2.b
         hh = h.blocks[off1]
-        @tturbo for k in indices(w, 1), j in indices(w, 2),
-                   n in indices(w, 1), l in indices(w, 2)
-            hkjnl = zero(eltype(w))
-            for i in indices(inp1, 2)
-                hkjnl += inp1[j, i] * inp1[l, i] * b[k, n, i]
-            end
-            hh[k, j, n, l] = hkjnl
-        end
+        _update_hessian!(hh, w, w, inp1, inp1, b, 0, weights)
         off += l1.k
     else
         a′ = prev.a′
@@ -797,45 +926,24 @@ function _hessian!(h, l1, layers, inp1, inp2, prev, x,
         b = l2.b
         hh = h.blocks[off1]
         if l1.a′ === a′
-            @tturbo for k in indices(w1, 1), j in indices(w1, 2),
-                       n in indices(w2, 1), l in indices(w2, 2)
-                hkjnl = zero(eltype(w1))
-                for i in indices(inp1, 2)
-                    hkjnl += inp1[j, i] * inp2[l, i] * l1.b[n + off, k, i]
-                end
-                hh[k, j, n, l] = hkjnl
-            end
-            @tturbo for k in indices(w1, 1), j in indices(w1, 2), n in indices(w2, 1)
-                hkjnk = zero(eltype(w1))
-                for i in indices(inp1, 2)
-                    hkjnk += inp1[j, i] * l2.delta[n, i] * a′[k, i]
-                end
-                hh[k, j, n, k] += hkjnk
-            end
+            _update_hessian!(hh, w1, w2, inp1, inp2, l1.b, off, weights)
+            _update_hessian2!(hh, w1, w2, inp1, l2.delta, a′, weights)
         else
             goff = off - l1.k - prev.k
-            @tturbo for k in indices(w1, 1), j in indices(w1, 2),
-                       n in indices(w2, 1), l in indices(w2, 2)
-                hkjnl = zero(eltype(w1))
-                for i in indices(inp1, 2)
-                    hkjnl += inp1[j, i] * inp2[l, i] * l1.b[n + off, k, i]
-                    hkjnl += inp1[j, i] * l2.delta[n, i] * a′[l, i] * l1.g[l + goff, k, i]
-                end
-                hh[k, j, n, l] = hkjnl
-            end
+            _update_hessian3!(hh, w1, w2, inp1, inp2, l2.delta, l1.b, a′, l1.g, off, goff, weights)
         end
         off += l2.k
     end
     off1 += StaticInt(1)
     length(layers) == 1 && return off1
-    _hessian!(h, l1, Base.tail(layers), inp1, l2.a, l2, x, off1, off, off2)
+    _hessian!(h, l1, Base.tail(layers), inp1, l2.a, l2, x, off1, off, off2, weights)
 end
-function compute_h!(h, layers, input, x, off1 = StaticInt(1))
+function compute_h!(h, layers, input, x, off1 = StaticInt(1), weights = nothing)
     l = first(layers)
-    off1 = _hessian!(h, l, layers, input, input, nothing, x, off1)
-    compute_h!(h, Base.tail(layers), l.a, x, off1)
+    off1 = _hessian!(h, l, layers, input, input, nothing, x, off1, StaticInt(0), off1, weights)
+    compute_h!(h, Base.tail(layers), l.a, x, off1, weights)
 end
-compute_h!(::Any, ::Tuple{}, ::Any, ::Any, ::Any; kwargs...) = nothing
+compute_h!(::Any, ::Tuple{}, ::Any, ::Any, ::Any, ::Any) = nothing
 function copy_h!(flat, offsets, blocks)
     for idx in eachindex(offsets)
         off1, off2 = offsets[idx]
@@ -849,21 +957,26 @@ function copy_h!(flat, offsets, blocks)
         end
     end
 end
-function hessian!(h, net::Net, x;
-                  forward = true, backprop = true,
-                  scale = one(eltype(net.input)),
-                  losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
-                  nx = weightnorm(x), maxnorm = Inf, merge = nothing)
+function _hessian!(h, net::Net, x;
+        forward = true, backprop = true, derivs = 2, losstype = MSE(), weights = net.weights)
     input = net.input
     target = net.target
-    forward && forward!(net, x, input; derivs = 2)
+    forward && forward!(net, x, input; derivs)
     layers = net.layers
-    backprop && backprop!(layers, target, x; derivs = 2, losstype, scale)
+    backprop && backprop!(layers, target, x; derivs, losstype)
     compute_g!(layers, x)
-    compute_b!(layers, layers, x; losstype, scale)
-    compute_h!(h, layers, input, x)
-    if merge !== nothing
-        λ = merge.lambda * size(input, 2)
+    compute_b!(layers, layers, x; losstype)
+    compute_h!(h, layers, input, x, StaticInt(1), weights)
+    copy_h!(h.flat, h.offsets, h.blocks)
+    h.flat
+end
+function hessian!(h, net, x;
+                  forward = true, backprop = true,
+                  losstype = MSE(), derivs = 2,
+                  nx = weightnorm(x), maxnorm = Inf, merge = nothing, weights = net.weights)
+    hflat = _hessian!(h, net, x; forward, backprop, losstype, weights, derivs)
+    if merge !== nothing # doesn't work for NetI
+        λ = merge.lambda * n_samples(net)
         i, j = merge.pair
         hw1 = h.blocks[merge.layer]
         for k in indices(hw1, 2)
@@ -872,12 +985,12 @@ function hessian!(h, net::Net, x;
             hw1[j, k, j, k] += λ
             hw1[j, k, i, k] -= λ
         end
+        copy_h!(hflat, h.offsets, h.blocks)
     end
-    copy_h!(h.flat, h.offsets, h.blocks)
     if nx > maxnorm
-        h.flat .+= 2*(nx - maxnorm) * x * x'/length(x)^2 + I*(nx - maxnorm)^2/length(x)
+        hflat .+= (2*(nx - maxnorm) * x * x'/length(x)^2 + I*(nx - maxnorm)^2/length(x)) * n_samples(net)
     end
-    h.flat
+    hflat
 end
 struct Hessian{T}
     blocks::Vector{Array{T, 4}}
@@ -970,7 +1083,7 @@ function step!(n, b::MiniBatch)
     @views n.input .= b.input[:, start:start+batchsize-1]
     @views n.target .= b.target[:, start:start+batchsize-1]
     b.start += batchsize
-    if b.start > size(b.input, 2) - batchsize
+    if b.start > size(b.input, 2) - batchsize + 1
         b.start = 1
     end
 end
@@ -1029,7 +1142,7 @@ function (terminator::ODETerminator)(u, t, integrator)
         false
     end
 end
-function terminator(o; maxtime = 20, maxiter = typemax(Int), losstype = :mse)
+function terminator(o; maxtime = 20, maxiter = typemax(Int), losstype = MSE())
     DiscreteCallback(ODETerminator(; o, maxtime = float(maxtime), maxiter),
                      terminate!)
 end
@@ -1043,8 +1156,9 @@ function alg_default(x)
     length(x) ≤ 1024 && return KenCarp58()
     return TRBDF2(autodiff = false)
 end
-function default_hessian_template(p, maxiterations_ode, alg,
+function default_hessian_template(net, p, maxiterations_ode, alg,
                                   maxiterations_optim, optim_solver, verbosity)
+    isa(net, NetI) && return nothing
     if needs_hessian(maxiterations_ode, alg, maxiterations_optim, optim_solver)
         if length(p) > 10^4 && verbosity > 0
             @warn "Computing Hessians for $(length(p)) parameters requires a lot of memory and time"
@@ -1055,7 +1169,7 @@ function default_hessian_template(p, maxiterations_ode, alg,
     end
 end
 weightnorm(x) = sum(abs2, x)/(2*length(x))
-Base.@kwdef mutable struct OptimizationState{T,N,NE,Tau,M,B}
+Base.@kwdef mutable struct OptimizationState{T,N,NE,LT,Tau,M,B,W}
     net::N
     net_eval::NE = net
     t0::Float64 = time()
@@ -1066,21 +1180,24 @@ Base.@kwdef mutable struct OptimizationState{T,N,NE,Tau,M,B}
     bestl::Float64 = Inf
     bestx::T = random_params(net)
     maxnorm::Float64 = Inf
-    scale::Float64 = 1.
     verbosity::Int = 0
     show_progress::Bool = true
     hessian_template = nothing
     progress_interval::Float64 = 5.
     patience::Int = 2*10^4
-    losstype::Symbol = isa(net, NetI) ? :mse : net.layers[end].f == softmax ? :crossentropy : :se
+    losstype::LT = isa(net, NetI) ? MSE() : net.layers[end].f == softmax ? NegativeLogLikelihood() : MSE()
     tauinv::Tau = nothing
     merge::M = nothing
     batcher::B = FullBatch()
+    weights::W = nothing
 end
 scale!(x, ::Nothing) = x
 scale!(x, tauinv) = x .*= tauinv
-function OptimizationState(net; maxnorm = Inf, scale = 1., progress_interval = 5., net_eval = net, batchsize = nothing, kwargs...)
-    if !isnothing(batchsize) && batchsize != size(net.input, 2)
+function OptimizationState(net; maxnorm = Inf, progress_interval = 5., net_eval = net, batchsize = nothing, kwargs...)
+    if !isnothing(batchsize) && batchsize != n_samples(net)
+        if n_samples(net) % batchsize != 0
+            @warn "Number of samples $(n_samples(net)) is not a multiple of the batchsize $batchsize."
+        end
         batcher = MiniBatch(net.input, net.target, batchsize, 1)
         _net = Net(net,
                    input = net.input[:, 1:batchsize],
@@ -1090,7 +1207,7 @@ function OptimizationState(net; maxnorm = Inf, scale = 1., progress_interval = 5
         batcher = FullBatch()
         _net = net
     end
-    OptimizationState(; net = _net, net_eval, maxnorm = float(maxnorm), scale = float(scale), progress_interval = float(progress_interval), batcher, kwargs...)
+    OptimizationState(; net = _net, net_eval, maxnorm = float(maxnorm), progress_interval = float(progress_interval), batcher, kwargs...)
 end
 struct Loss{T,N}
     o::OptimizationState{T,N}
@@ -1099,11 +1216,11 @@ function (l::Loss)(x; nx = weightnorm(x), forward = true, derivs = 0)
     o = l.o
     loss = _loss(o.net_eval, x;
                  losstype = o.losstype, forward, nx, maxnorm = o.maxnorm,
-                 derivs, scale = o.scale, merge = o.merge)
+                 merge = o.merge, weights = o.weights, derivs)
     o.fk += 1
     if loss < o.bestl
         o.k_last_best = o.fk
-        o.bestl = loss/o.scale
+        o.bestl = loss
         o.bestx .= x
     end
     loss
@@ -1111,13 +1228,13 @@ end
 struct Grad{T,N}
     l::Loss{T,N}
 end
-function (g::Grad)(dx, x; nx = weightnorm(x), derivs = 1, forward = true, kwargs...)
+function (g::Grad)(dx, x; nx = weightnorm(x), forward = true, kwargs...)
     o = g.l.o
-    gradient!(dx, o.net, x; scale = o.scale, derivs, forward, nx, maxnorm = o.maxnorm, merge = o.merge, kwargs...)
+    step!(o.net, o.batcher)
+    gradient!(dx, o.net, x; forward, nx, maxnorm = o.maxnorm, merge = o.merge, weights = o.weights, kwargs...)
     if forward == true && start_of_epoch(o.batcher)
         g.l(x; nx, forward = o.net !== o.net_eval)
     end
-    step!(o.net, o.batcher)
     o.gk += 1
     if o.show_progress
         if time() - o.t0 > o.progress_interval
@@ -1133,7 +1250,9 @@ end
 function (h::Hess)(H, x; nx = weightnorm(x), kwargs...)
     o = h.g.l.o
     hessian!(Hessian(o.hessian_template, H), o.net, x;
-             nx, maxnorm = o.maxnorm, scale = o.scale, merge = o.merge, kwargs...)
+             nx, maxnorm = o.maxnorm,
+             weights = o.weights,
+             merge = o.merge, kwargs...)
     o.hk += 1
     scale!(H, h.g.l.o.tauinv)
 end
@@ -1185,7 +1304,6 @@ Keyword arguments:
 
     maxnorm = Inf                  # constant c in loss formula
 
-    loss_scale = 1.                # scale to loss, e.g. for reaching higher accuracy
     batchsize = nothing,           # using the full data set in each step when `nothing`
 
     alg = alg_default(p)           # ODE solver: KenCarp58() for length(p) ≤ 64, RK4() otherwise
@@ -1199,6 +1317,8 @@ Keyword arguments:
 
     maxiterations_optim = 10^5     # maximum iterations of optimizer
     g_tol = 1e-12                  # stop if gradient norm is below g_tol
+    patience = 10^4                # Number of steps without decrease of the loss function until converged
+    tauinv = nothing               # nothing, a scalar or a ComponentArray of shape `x0` with inverse time scales
     minloss = 1e-30                # stop if MSE loss is below minloss
     maxtime_optim = 2*60           # maximum amount of time in seconds for the Newton optimization
     optim_solver = optim_solver_default(p) # optimizer: NewtonTrustRegion() for length(p) ≤ 32, :LD_SLSQP for length(p) ≤ 1000, BFGS() otherwise
@@ -1206,18 +1326,20 @@ Keyword arguments:
     verbosity = 1                  # use verbosity = 1 for more outputs
     show_progress = true           # show progress
     progress_interval = 5          # show progress every x seconds
-    losstype = :mse                # loss type used for reporting :mse or :rmse
     result = :dict                 # change to result = :raw for more detailed results
     exclude = String[]             # dictionary keys to exclude from the results dictionary
     include = nothing              # dictionary keys to include (everything if nothing)
 
 """
-function train(net::Net, p;
+layer_spec(net::Net) = net.layerspec
+layer_spec(net::NetI) = net.student.layerspec
+weights(net::Net) = net.weights
+weights(::NetI) = nothing
+function train(net, p;
                maxnorm = Inf,
-               loss_scale = 1.,
                verbosity = 1,
                batchsize = nothing,
-               losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
+               losstype = MSE(),
                show_progress = verbosity == 1,
                progress_interval = 5,
                alg = alg_default(p),
@@ -1227,36 +1349,32 @@ function train(net::Net, p;
                patience = 10^4,
                tauinv = nothing,
                merge = nothing,
-               hessian_template = default_hessian_template(p, maxiterations_ode, alg, maxiterations_optim, optim_solver, verbosity),
+               hessian_template = default_hessian_template(net, p, maxiterations_ode, alg, maxiterations_optim, optim_solver, verbosity),
+               weights = weights(net),
                kwargs...)
     checkparams(net, p)
-    dx = gradient(net, p, scale = loss_scale)
+    dx = gradient(net, p)
     gnorminf = maximum(abs, dx)
-    if verbosity > 0
-        @show gnorminf
-    end
-    if gnorminf > 5e2
-        loss_scale = 1/(gnorminf/loss_scale/5e2)
-        verbosity > 0 && @info "Large gradients encountered. Setting `loss_scale` to $loss_scale."
-    end
     _, g!, h!, fgh!, fg! = get_functions(net, maxnorm;
                                          hessian_template = hessian_template,
-                                         scale = loss_scale,
                                          patience,
                                          losstype,
                                          merge,
-                                         tauinv = isnothing(tauinv) ? nothing : copy(ComponentArray(tauinv)),
+                                         tauinv = isa(tauinv, ComponentArray) || isa(tauinv, NamedTuple) ? copy(ComponentArray(tauinv)) : tauinv,
                                          batchsize,
                                          show_progress,
+                                         weights,
                                          progress_interval = float(progress_interval),
                                          verbosity)
-    lossfunc = u -> loss(net, u; losstype)
+    lossfunc = u -> loss(net, u; losstype, weights)
     train(net, lossfunc, g!, h!, fgh!, fg!, p;
-          loss_scale, verbosity, losstype,
+          verbosity, losstype,
           maxiterations_ode, maxiterations_optim,
           alg, optim_solver,
           kwargs...)
 end
+n_samples(net::Net) = size(net.input, 2)
+n_samples(net::NetI) = 1
 function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                alg = alg_default(p),
                optim_solver = optim_solver_default(p),
@@ -1272,14 +1390,13 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                maxtime_ode = 3*60,
                maxtime_optim = 2*60,
                result = :dict,
-               losstype = net.layers[end].f == softmax ? :crossentropy : :mse,
-               loss_scale = 1.,
-               minloss = 2e-32*size(net.input, 2)/loss_scale,
+               losstype = MSE(), # anything else than MSE() is not tested
+               minloss = 2e-32*n_samples(net),
                use_component_arrays = false,
                n_samples_trajectory = 100,
                include = nothing,
                exclude = String[],
-               transpose_solution = false,
+               transpose_solution = false, # obsolete
                dt = nothing,
                optim_options = Optim.Options(iterations = maxiterations_optim,
                                                time_limit = maxtime_optim,
@@ -1310,7 +1427,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
             end
             while true
                 g!(G, x)
-                G .*= 1/size(net.input, 2) # scale with data
+                G .*= 1/n_samples(net) # scale with data
                 x .-= apply!(alg, x, G)
                 if save_everystep
                     push!(trajectory, (i, copy(x)))
@@ -1383,6 +1500,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
     optim_stopped_by = nothing
     if maxiterations_optim > 0
         if !isnothing(g!.l.o.tauinv)
+            @warn "Setting tauinv to 1. Consider setting `maxiterations_optim = 0`, if you do not want to use second order optimization."
             g!.l.o.tauinv .= 1
         end
         g!.l.o.k_last_best = g!.l.o.fk # reset patience
@@ -1452,18 +1570,18 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
         optim_time_run = 0
     end
     x = g!.l.o.bestx
-    gradient!(G, net, x) # recompute gradient
+    gradient!(G, net, x, weights = g!.l.o.weights) # recompute gradient
     N = isa(net, Net) ? size(net.input, 2) : 1.
     gnorm = maximum(abs, G) / N
     g!(G, x) # recompute with regularized loss
-    gnorm_regularized = maximum(abs, G) / loss_scale / N
+    gnorm_regularized = maximum(abs, G) / N
     loss = lossfunc(x)
     rawres = (; ode = sol, optim = res, ode_x, optim_state = g!.l.o,
               x, init = p, loss, ode_loss, gnorm, gnorm_regularized,
               ode_time_run, ode_iterations, net, optim_time_run,
               converged = converged(g!.l.o),
               optim_stopped_by, ode_stopped_by,
-              total_time = time() - tstart,
+              total_time = time() - tstart, weights = g!.l.o.weights,
               optim_iterations, trajectory, lossfunc, transpose_solution)
     if result == :raw
         rawres
@@ -1513,6 +1631,7 @@ function subsample(x, n)
 end
 transpose_solution(res, x) = res.transpose_solution ? transpose_params(x) : x
 _extract(::Val{:loss}, res) = res.loss
+_extract(::Val{:weights}, res) = res.weights
 _extract(::Val{:ode_loss}, res) = res.ode_loss
 _extract(::Val{:gnorm}, res) = res.gnorm
 _extract(::Val{:gnorm_regularized}, res) = res.gnorm_regularized
@@ -1527,10 +1646,10 @@ _extract(::Val{:optim_time_run}, res) = res.optim_time_run
 _extract(::Val{:optim_iterations}, res) = res.optim_iterations
 _extract(::Val{:input}, res) = isa(res.net, Net) ? Array(res.net.input) : nothing
 _extract(::Val{:target}, res) = isa(res.net, Net) ? Array(res.net.target) : nothing
-_extract(::Val{:teacher}, res) = isa(res.net, NetI) ? res.net.xt : nothing
+_extract(::Val{:teacher}, res) = hasproperty(res, :teacher) ? res.teacher.p : nothing
 _extract(::Val{:layerspec}, res) = _layerextract(res.net)
 _layerextract(net::Net) = map(x -> (x[1], string(x[2]), x[3]), net.layerspec)
-_layerextract(net::NetI) = (size(net.u, 1), isa(net.f, PotentialApproximator) ? string(net.f.f) : string(net.f) , false)
+_layerextract(net::NetI) = map(x -> (x[1], string(x[2]), x[3]), net.student.layerspec)
 _extract(::Val{:trajectory}, res) = isnothing(res.trajectory) ? nothing : OrderedDict(t => params2dict(transpose_solution(res, u)) for (t, u) in res.trajectory)
 _extract(::Val{:loss_curve}, res) = isnothing(res.trajectory) ? nothing : [res.lossfunc(u) for (_, u) in res.trajectory]
 _extract(::Val{:optim_stopped_by}, res) = res.optim_stopped_by
@@ -1551,7 +1670,7 @@ function result2dict(res;
                      exclude = String[],
                      include = nothing)
     if include === nothing
-        include = ["loss", "converged", "optim_stopped_by", "ode_stopped_by", "total_time", "ode_loss", "gnorm", "gnorm_regularized", "init", "x", "ode_x", "ode_time_run", "ode_iterations", "optim_time_run", "optim_iterations", "input", "target", "layerspec", "trajectory", "loss_curve", "teacher"]
+        include = ["loss", "converged", "optim_stopped_by", "ode_stopped_by", "total_time", "ode_loss", "gnorm", "gnorm_regularized", "init", "x", "ode_x", "ode_time_run", "ode_iterations", "optim_time_run", "optim_iterations", "input", "target", "layerspec", "trajectory", "loss_curve", "teacher", "weights"]
     end
     filter(x -> !isnothing(last(x)),
            Dict(Pair(x, _extract(Val(Symbol(x)), res))
@@ -1586,19 +1705,12 @@ function unpickle(filename)
 end
 
 input_dim(net::Net) = size(net.input, 1) - first(net.layers).bias
+random_params(net::NetI; kwargs...) = random_params(net.student; kwargs...)
 random_params(net; kwargs...) = random_params(Random.GLOBAL_RNG, net; kwargs...)
 function random_params(rng, net::Net; distr_fn = glorot_normal)
     glorot(rng, (input_dim(net),
                  Int.(getproperty.(net.layers, :k))...), eltype(net.input),
            biases = getproperty.(net.layers, :bias); distr_fn)
-end
-function random_params(rng, net::NetI; distr_fn = glorot_normal, transpose = true)
-    w = glorot(rng, (input_dim(net), size(net.u, 1), 1), eltype(net.u))
-    if transpose
-        transpose_params(w)
-    else
-        w
-    end
 end
 glorot_normal(in, out, T = Float64) = glorot_normal(Random.GLOBAL_RNG, in, out, T)
 glorot_uniform(in, out, T = Float64) = glorot_uniform(Random.GLOBAL_RNG, in, out, T)

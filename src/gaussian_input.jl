@@ -1,145 +1,459 @@
-###
-### Quadrature
-###
+struct ϕ end
+struct ∂rϕ end
+struct ∂bϕ end
+struct ∂r∂rϕ end
+struct ∂r∂bϕ end
+struct ∂b∂bϕ end
+struct ϕϕ end
+struct ∂rϕϕ end
+struct ∂bϕϕ end
+struct ∂r∂rϕϕ end
+struct ∂r∂bϕϕ end
+struct ∂b∂bϕϕ end
+struct ∂r₁ϕϕ end
+struct ∂b₁ϕϕ end
+struct ∂uϕϕ end
+struct ∂r₁∂r₁ϕϕ end
+struct ∂r₁∂r₂ϕϕ end
+struct ∂r₁∂b₁ϕϕ end
+struct ∂r₂∂b₁ϕϕ end
+struct ∂r₁∂uϕϕ end
+struct ∂u∂uϕϕ end
+struct ∂b₁∂b₁ϕϕ end
+struct ∂b₁∂b₂ϕϕ end
+struct ∂b₁∂uϕϕ end
 
-const TOL = (atol = Ref(1e-11), rtol = Ref(1e-11))
-"""
-    chofv(x)
+function integrate end
 
-Change of variables.
-See https://giordano.github.io/Cuba.jl/stable/
-"""
-chofv(x) = ((2x-1)/((1-x)*x), (2x^2-2x+1)/((1-x)^2*x^2))
-mvnormal(c, x, sinv) = c*exp(-1/2*(sinv[1, 1]*x[1]^2 + sinv[2, 2]*x[2]^2 + 2*sinv[1, 2]*x[1]*x[2]))
-function mvnex_integrand(f, u)
-    c = 1/(2π*sqrt(1-u^2))
-    sinv = 1/(1-u^2) * [1 -u
-                       -u 1]
-    function(x, ret)
-        y1, dy1 = chofv(x[1])
-        y2, dy2 = chofv(x[2])
-        if isinf(y1) || isinf(y2)
-            ret .= 0.
+for (kind, func) in ((:ϕ, :(f(h))),
+                     (:∂rϕ, :(x * f′(h))),
+                     (:∂bϕ, :(f′(h))),
+                     (:∂r∂rϕ, :(x^2 * f′′(h))),
+                     (:∂r∂bϕ, :(x * f′′(h))),
+                     (:∂b∂bϕ, :(f′′(h))),
+                     (:ϕϕ, :(f(h)^2)),
+                     (:∂rϕϕ, :(2 * x * f(h) * f′(h))),
+                     (:∂bϕϕ, :(2 * f(h) * f′(h))),
+                     (:∂r∂rϕϕ, :(2 * x^2 * (f(h) * f′′(h) + f′(h)^2))),
+                     (:∂r∂bϕϕ, :(2 * x * (f(h) * f′′(h) + f′(h)^2))),
+                     (:∂b∂bϕϕ, :(2 * (f(h) * f′′(h) + f′(h)^2))),
+                    )
+    eval(quote
+             function integrate(::$kind, w, _x, f, r, b)
+                 tmp = zero(eltype(w))
+                 f′ = deriv(f)
+                 f′′ = second_deriv(f)
+                 @tturbo for i in eachindex(w)
+                     x = _x[i]
+                     h = r * x + b
+                     tmp += w[i] * $func
+                 end
+                 tmp
+             end
+         end)
+end
+for (kind, func) in ((:ϕϕ, :(f1(h1) * f2(h2))),
+                     (:∂r₁ϕϕ, :(x * f1′(h1) * f2(h2))),
+                     (:∂b₁ϕϕ, :(f1′(h1) * f2(h2))),
+                     (:∂uϕϕ, :(r1 * r2 * f1′(h1) * f2′(h2))),
+                     (:∂r₁∂r₁ϕϕ, :(x^2 * f1′′(h1) * f2(h2))),
+                     (:∂r₁∂r₂ϕϕ, :(x * y * f1′(h1) * f2′(h2))),
+                     (:∂r₁∂b₁ϕϕ, :(x * f1′′(h1) * f2(h2))),
+                     (:∂r₂∂b₁ϕϕ, :(y * f1′(h1) * f2′(h2))),
+                     (:∂r₁∂uϕϕ, :(r2 * (f1′(h1) + r1 * x * f1′′(h1)) * f2′(h2))),
+                     (:∂u∂uϕϕ, :(r1^2 * r2^2 * f1′′(h1) * f2′′(h2))),
+                     (:∂b₁∂b₁ϕϕ, :(f1′′(h1) * f2(h2))),
+                     (:∂b₁∂b₂ϕϕ, :(f1′(h1) * f2′(h2))),
+                     (:∂b₁∂uϕϕ, :(r1 * r2 * f1′′(h1) * f2′(h2))),
+                    )
+    eval(quote
+             function integrate(::$kind, w, _x, f1, r1, b1, f2, r2, b2, u, u′ = sqrt(1 - u^2))
+                 tmp = zero(eltype(w))
+                 f1′ = deriv(f1)
+                 f1′′ = second_deriv(f1)
+                 f2′ = deriv(f2)
+                 f2′′ = second_deriv(f2)
+                 @tturbo for i in eachindex(w)
+                     x = _x[i, 1]
+                     y = u * x + u′ * _x[i, 2]
+                     h1 = r1 * x + b1
+                     h2 = r2 * y + b2
+                     tmp += w[i] * $func
+                 end
+                 tmp
+             end
+         end)
+end
+
+struct NetI{T,TE,S,G1,G2,TB1,TB2,TBT1,TBT2}
+    teacher::TE
+    student::S
+    g1::G1
+    g2::G2
+    gr::Vector{T}
+    gs::Matrix{T}
+    gt::Matrix{T}
+    u::Matrix{T}
+    v::Matrix{T}
+    w1::Matrix{T}
+    b1::TB1
+    w2::Matrix{T}
+    b2::TB2
+    w1t::Matrix{T}
+    b1t::TBT1
+    w2t::Matrix{T}
+    b2t::TBT2
+    rw1::Vector{T}
+    rwt::Vector{T}
+    dgr::Matrix{T}
+    dgru::Array{T,3}
+    dgrv::Array{T,3}
+    loss_correction_t1::T
+    s::Base.RefValue{T}
+    g0::Vector{T}
+    dg0::Matrix{T}
+    loss_correction_t2::T
+end
+input_dim(net::NetI) = size(net.w1t, 2)
+function Base.show(io::IO, net::NetI)
+    println(io, "Network with $(input_dim(net))D gaussian input")
+    println(io, "student: $(net.student.layerspec)")
+    print(io, "teacher: $(net.teacher.net.layerspec)")
+end
+function _norm!(r, w)
+    for i in eachindex(r)
+        r[i] = 0
+        for j in axes(w, 2)
+            r[i] += w[i, j]^2
+        end
+        r[i] = sqrt(r[i])
+    end
+    r
+end
+_weights_and_biases(w, is_bias) = w[:, 1:end-is_bias], is_bias ? w[:, end] : nothing
+_weights_and_biases!(w, ::Nothing, p) = copyto!(w, p), nothing
+_bias(::Nothing, i) = 0
+_bias(b, i) = b[i]
+_similarity(x, y, i, j, rx, ry) = sum(x[i, k]*y[j, k] for k in axes(x, 2))/(rx*ry)
+function _weights_and_biases!(w, b, p)
+    n = length(w)
+    copyto!(w, 1, p, 1, n),
+    copyto!(b, 1, p, n+1, length(b))
+end
+function NetI(teacher, student; T = eltype(student.input),
+               g1 = _stride_arrayize(NormalIntegral(d = 1)),
+               g2 = _stride_arrayize(NormalIntegral(d = 2)))
+    @assert isa(teacher, TeacherNet)
+    @assert isa(student, Net)
+    @assert length(teacher.net.layerspec) == 2
+    @assert length(student.layerspec) == 2
+    @assert teacher.net.layerspec[2][2] == identity
+    @assert student.layerspec[2][2] == identity
+    @assert teacher.net.layerspec[2][1] == 1
+    @assert student.layerspec[2][1] == 1
+    t_spec = teacher.net.layerspec
+    s_spec = student.layerspec
+    r = t_spec[1][1]
+    k = s_spec[1][1]
+    _p = random_params(student)
+    w1, b1 = _weights_and_biases(_p.w1, s_spec[1][3])
+    w2, b2 = _weights_and_biases(_p.w2, s_spec[2][3])
+    w1t, b1t = _weights_and_biases(teacher.p.w1, t_spec[1][3])
+    w2t, b2t = _weights_and_biases(teacher.p.w2, t_spec[2][3])
+    rwt = _norm!(zeros(r), w1t)
+    ft = t_spec[1][2]
+    loss_correction_t1 = zero(T)
+    loss_correction_t2 = zero(T)
+    for i in 1:r
+        loss_correction_t2 += w2t[i]^2 * integrate(ϕϕ(), g1.w, g1.x, ft, rwt[i], _bias(b1t, i))
+        if !isnothing(b1t)
+            loss_correction_t1 += w2t[i] * integrate(ϕ(), g1.w, g1.x, ft, rwt[i], _bias(b1t, i))
+        end
+        for j in i+1:r
+            u = _similarity(w1t, w1t, i, j, rwt[i], rwt[j])
+            loss_correction_t2 += 2*w2t[i] * w2t[j] * integrate(ϕϕ(), g2.w, g2.x, ft, rwt[i], _bias(b1t, i), ft, rwt[j], _bias(b1t, j), u, sqrt(1-u^2))
+        end
+    end
+    NetI(teacher, student, g1, g2,
+          zeros(T, k),
+          zeros(T, k, k),
+          zeros(T, k, r),
+          zeros(T, k, r),
+          zeros(T, k, k),
+          w1, b1, w2, b2,
+          w1t, b1t, w2t, b2t,
+          zeros(T, k),
+          rwt,
+          zeros(T, k, 5),
+          zeros(T, k, r, 11),
+          zeros(T, k, k, 13),
+          loss_correction_t1,
+          Ref(zero(T)),
+          zeros(T, k),
+          zeros(T, k, 5),
+          loss_correction_t2)
+end
+hessian(net::NetI, x; kwargs...) = _hessian!(zeros(length(x), length(x)), net, x; kwargs...)
+function _hessian!(H, net::NetI{T}, x; backprop = true, forward = true, second_order = true, weights = nothing, losstype = MSE(), derivs = nothing) where T
+    (; g1, g2, w1, b1, w2, b2, rw1, rwt, w1t, b1t, w2t, b2t, g0, gr, gs, u, v, dg0, dgr, dgru, dgrv) = net
+    forward && _loss(net, x)
+    backprop && backward!(net, x; forward = false)
+    f = net.student.layerspec[1][2]
+    ft = net.teacher.net.layerspec[1][2]
+    delta_b = _bias(b2, 1) - _bias(b2t, 1)
+    if second_order
+        if !isnothing(b1) || delta_b ≠ 0
+            d2g0drb!(dg0, g1, f, rw1, b1)
+        end
+        d2gdrb!(dgr, g1, f, rw1, b1)
+        d2gdrub!(dgru, g2, f, rw1, b1, ft, rwt, b1t, u)
+        d2gdrvb!(dgrv, g2, f, rw1, b1, v)
+    end
+    K, Din = size(w1)
+    N0 = length(w1)
+    N1 = N0 + (!isnothing(b1)) * size(w1, 1)
+    for i in eachindex(w2), j in eachindex(w2) # second derivative of w2
+        if i == j
+            H[N1+i, N1+i] = gr[i]
         else
-            factor = mvnormal(c, (y1, y2), sinv) * dy1 * dy2
-            for (i, fi) in pairs(f)
-                ret[i] = fi(y1, y2) * factor
+            H[N1+i, N1+j] = gs[i, j]
+        end
+    end
+    for i in eachindex(w1), j in eachindex(w2) # mixed derivatives
+        tmp = 0.
+        i1, i2 = _ind(i, Din)
+        if i1 == j
+            tmp = w2[j]*dgr[j, 1]*w1[i1, i2]/rw1[j]
+            for k in axes(w1t, 1)
+                tmp -= w2t[k]*_c(w1, rw1, w1t, rwt, u, dgru, i1, i2, k)
+            end
+            for k in axes(w1, 1)
+                k == i1 && continue
+                tmp += w2[k]*_c(w1, rw1, w1, rw1, v, dgrv, i1, i2, k)
+            end
+            if delta_b ≠ 0
+                tmp += delta_b * w1[i1, i2]/rw1[i1]*dg0[i1, 1]
+            end
+        else
+            tmp = w2[i1]*_c(w1, rw1, w1, rw1, v, dgrv, i1, i2, j)
+        end
+        _i = (i2-1)*K+i1
+        H[_i, N1 + j] = H[N1 + j, _i] = tmp
+    end
+    for i in eachindex(w1), j in eachindex(w1) # second derivatives of w1
+        tmp = zero(T)
+        j > i && continue
+        i1, i2 = _ind(i, Din)
+        j1, j2 = _ind(j, Din)
+        if i1 == j1
+            tmp = 1/2*w2[i1]^2*(dgr[i1, 3]*_drw2(w1, rw1, i1, i2)*_drw2(w1, rw1, j1, j2) -
+                                dgr[i1, 1]*w1[i1, i2]*w1[j1, j2]/rw1[i1]^3)
+            if i2 == j2
+                tmp += 1/2*w2[i1]^2*dgr[i1, 1]/rw1[i1]
+            end
+            for k in eachindex(w2)
+                k == j1 && continue
+                tmp += w2[k]*w2[j1]*_dc2(w1, rw1, w1, rw1, v, dgrv, i1, k, i2, j1, j2)
+            end
+            for k in eachindex(w2t)
+                tmp -= w2t[k]*w2[j1]*_dc2(w1, rw1, w1t, rwt, u, dgru, i1, k, i2, j1, j2)
+            end
+            if delta_b ≠ 0
+                tmp += delta_b * w2[i1] * w1[i1, i2] * w1[j1, j2]/rw1[i1]^2 * (-dg0[i1, 1]/rw1[i1] + dg0[i1, 3])
+                if i2 == j2
+                    tmp += delta_b * w2[i1]/rw1[i1]*dg0[i1, 1]
+                end
+            end
+        else
+            tmp = w2[i1]*w2[j1]*_dc2(w1, rw1, w1, rw1, v, dgrv, i1, j1, i2, j1, j2)
+        end
+        _i = (i2-1)*K+i1
+        _j = (j2-1)*K+j1
+        H[_i, _j] = H[_j, _i] = tmp
+    end
+    if !isnothing(b2)
+        H[end, end] = 1
+    end
+    if delta_b ≠ 0
+        if !isnothing(b2)
+            for i in eachindex(w2)
+                H[N1+i, end] = H[end, N1+i] = g0[i]
+            end
+            for i in eachindex(w1)
+                i1, i2 = _ind(i, Din)
+                _i = (i2-1)*K+i1
+                H[_i, end] = H[end, _i] = w2[i1] * w1[i1, i2]/rw1[i1]*dg0[i1, 1]
             end
         end
     end
-end
-function mvnex_integrand_hcub(f, u)
-    c = 1/(2π*sqrt(1-u^2))
-    sinv = 1/(1-u^2) * [1 -u
-                       -u 1]
-    function(x)
-        y1, dy1 = chofv(x[1])
-        y2, dy2 = chofv(x[2])
-        if isinf(y1) || isinf(y2)
-            0.
-        else
-            mvnormal(c, (y1, y2), sinv)*f(y1, y2) * dy1 * dy2
+    if !isnothing(b1)
+        for i in eachindex(b1)
+            for j in eachindex(w2) # b1 w2
+                tmp = zero(T)
+                if i == j
+                    tmp = delta_b * dg0[i, 2] + w2[i] * dgr[i, 2]
+                    for k in eachindex(w2t)
+                        tmp -= w2t[k] * dgru[i, k, 3]
+                    end
+                    for k in eachindex(w2)
+                        k == i && continue
+                        tmp += w2[k] * dgrv[i, k, 3]
+                    end
+                else
+                    tmp = w2[i] * dgrv[i, j, 3]
+                end
+                H[N0 + i, N1 + j] = H[N1 + j, N0 + i] = tmp
+            end
+            if !isnothing(b2) # b1 b2
+                H[N0 + i, end] = H[end, N0 + i] = w2[i] * dg0[i, 2]
+            end
+            for j in eachindex(b1) # b1 b1
+                tmp = zero(T)
+                if i == j
+                    tmp = delta_b * w2[i] * dg0[i, 4] + w2[i]^2/2 * dgr[i, 4]
+                    for k in eachindex(w2t)
+                        tmp -= w2[i] * w2t[k] * dgru[i, k, 9]
+                    end
+                    for k in eachindex(w2)
+                        k == i && continue
+                        tmp += w2[i] * w2[k] * dgrv[i, k, 9]
+                    end
+                else
+                    tmp = w2[i] * w2[j] * dgrv[i, j, 10]
+                end
+                H[N0 + i, N0 + j] = H[N0 + j, N0 + i] = tmp
+            end
+            for j in eachindex(w1)
+                j1, j2 = _ind(j, Din)
+                drdw = _drw2(w1, rw1, j1, j2)
+                if i == j1
+                    tmp = w2[i]^2/2 * _drw2(w1, rw1, i, j2) * dgr[i, 5] + delta_b * w2[i] * drdw * dg0[i, 5]
+                    for k in eachindex(w2t)
+                        tmp -= w2[i] * w2t[k] * (drdw * dgru[i, k, 10] +
+                                                 _dvw2(w1, rw1, w1t, rwt, u, i, j2, k) * dgru[i, k, 11])
+                    end
+                    for k in eachindex(w2)
+                        k == i && continue
+                        tmp += w2[i] * w2[k] * (drdw * dgrv[i, k, 11] +
+                                                _dvw2(w1, rw1, w1, rw1, v, i, j2, k) * dgrv[i, k, 13])
+                    end
+                else
+                    tmp = w2[i] * w2[j1] * (drdw * dgrv[i, j1, 12] +
+                                            _dvw2(w1, rw1, w1, rw1, v, j1, j2, i) * dgrv[i, j1, 13])
+                end
+                _j = (j2-1)*K+j1
+                H[N0 + i, _j] = H[_j, N0 + i] = tmp
+            end
         end
     end
+    H .*= 2
+    H
 end
-mvnex(f::Tuple, u; kwargs...) = cuhre(mvnex_integrand(f, u), 2, length(f); atol = TOL.atol[], rtol = TOL.rtol[], kwargs...)[1]
-mvnex(f, u; kwargs...) = mvnex((f,), u; kwargs...)[]
-mvnex_hcub(f, u; kwargs...) = hcubature(mvnex_integrand_hcub(f, u), (0., 0.), (1., 1.); atol = TOL.atol[], rtol = TOL.rtol[], kwargs...)[1]
-function nex_integrand(f)
-    c = 1/sqrt(2π)
-    function(x)
-        y, dy = chofv(x[1])
-        if isinf(y)
-            0.
-        else
-            c*exp(-1/2*y^2) * f(y) * dy
+function backward!(net::NetI, x; forward = true)
+    (; g1, g2, b1, b1t, b2, b2t, dg0, rw1, dgr, dgru, rwt, u, dgrv, v) = net
+    f = net.student.layerspec[1][2]
+    ft = net.teacher.net.layerspec[1][2]
+    forward && _loss(net, x)
+    if !isnothing(b1) || _bias(b2, 1) - _bias(b2t, 1) ≠ 0
+        dg0drb!(dg0, g1, f, rw1, b1)
+    end
+    dgdrb!(dgr, g1, f, rw1, b1)
+    dgdrub!(dgru, g2, f, rw1, b1, ft, rwt, b1t, u)
+    dgdrvb!(dgrv, g2, f, rw1, b1, v)
+end
+gradient(net::NetI, x; kwargs...) = _gradient!(zero(x), net, x; kwargs...)
+function _gradient!(dx, net::NetI, x; backward = true, forward = true, weights = nothing, derivs = nothing, losstype = MSE())
+    (; w1, b1, w2, b2, w1t, w2t, b2t, rw1, rwt, gr, gt, gs, dg0, dgr, dgru, dgrv, u, v) = net
+    forward && _loss(net, x)
+    backward && backward!(net, x; forward = false)
+    dw1 = getweights(net.student.layers[1], dx)
+    dw2 = getweights(net.student.layers[2], dx)
+    for i in eachindex(w2)
+        dw2[i] = 2*_dldw2(i, w2, w2t, gr, gs, gt)
+        for j in axes(w1, 2)
+            dw1[i, j] = w2[i]^2*dgr[i, 1]/rw1[i]*w1[i, j]
+            for k in eachindex(w2t)
+                dw1[i, j] -= 2*w2[i]*w2t[k]*_c(w1, rw1, w1t, rwt, u, dgru, i, j, k)
+            end
+            for k in eachindex(w2)
+                k == i && continue
+                dw1[i, j] += 2*w2[i]*w2[k]*_c(w1, rw1, w1, rw1, v, dgrv, i, j, k)
+            end
         end
     end
+    delta_b = _bias(b2, 1) - _bias(b2t, 1)
+    if !isnothing(b2)
+        dw2[end] = 2 * (net.s[] - net.loss_correction_t1 + delta_b)
+    end
+    if delta_b ≠ 0
+        for i in eachindex(w2)
+            dw2[i] += 2 * delta_b * net.g0[i]
+        end
+        for i in axes(w1, 1), j in axes(w1, 2)
+            dw1[i, j] += 2 * delta_b * w2[i] * w1[i, j]/rw1[i]*dg0[i, 1]
+        end
+    end
+    if !isnothing(b1)
+        for i in eachindex(b1)
+            dw1[i, end] = 2*delta_b*w2[i]*dg0[i, 2] + w2[i]^2 * dgr[i, 2]
+            for k in eachindex(w2t)
+                dw1[i, end] -= 2*w2[i]*w2t[k]*dgru[i, k, 3]
+            end
+            for k in eachindex(w2)
+                k == i && continue
+                dw1[i, end] += 2*w2[i]*w2[k]*dgrv[i, k, 3]
+            end
+        end
+    end
+    dx
 end
-nex(f; kwargs...) = hquadrature(nex_integrand(f), 0., 1.; atol = TOL.atol[], rtol = TOL.rtol[], kwargs...)[1]
-nex(f::Tuple; kwargs...) = [nex(fi; kwargs...) for fi in f]
+loss(net::NetI, x; kwargs...) = __loss(net, x; kwargs...)
+function __loss(net::NetI, x; forward = true, weights = nothing, losstype = MSE(), derivs = nothing)
+    (; w1, b1, w2, b2, w1t, b1t, w2t, b2t, rw1, rwt, gr, gt, gs, g0, u, v) = net
+    f = net.student.layerspec[1][2]
+    ft = net.teacher.net.layerspec[1][2]
+    _weights_and_biases!(w1, b1, getweights(net.student.layers[1], x))
+    _weights_and_biases!(w2, b2, getweights(net.student.layers[2], x))
+    _norm!(rw1, w1)
+    res = 0.
+    for i in eachindex(w2)
+        if forward
+            gr[i] = integrate(ϕϕ(), net.g1.w, net.g1.x, f, rw1[i], _bias(b1, i))
+        end
+        res += w2[i]^2 * gr[i]
+        for j in axes(w1t, 1)
+            if forward
+                u[i, j] = _u = _similarity(w1, w1t, i, j, rw1[i], rwt[j])
+                gt[i, j] = integrate(ϕϕ(), net.g2.w, net.g2.x, f, rw1[i], _bias(b1, i), ft, rwt[j], _bias(b1t, j), _u, sqrt(1 - _u^2))
+            end
+            res -= 2 * w2[i] * w2t[j] * gt[i, j]
+        end
+        for j in i+1:length(w2)
+            if forward
+                v[i, j] = v[j, i] = _similarity(w1, w1, i, j, rw1[i], rw1[j])
+                gs[i, j] = gs[j, i] = integrate(ϕϕ(), net.g2.w, net.g2.x, f, rw1[i], _bias(b1, i), f, rw1[j], _bias(b1, j), v[i, j], sqrt(1-v[i,j]^2))
+            end
+            res += 2 * w2[i] * w2[j] * gs[i, j]
+        end
+    end
+    delta_b = (_bias(b2, 1) - _bias(b2t, 1))
+    net.s[] = 0
+    if delta_b ≠ 0
+        s = 0
+        for i in eachindex(w2)
+            if forward
+                g0[i] = integrate(ϕ(), net.g1.w, net.g1.x, f, rw1[i], _bias(b1, i))
+            end
+            s += w2[i] * g0[i]
+        end
+        net.s[] = s
+    end
+    res + net.loss_correction_t2 + delta_b^2 + 2 * delta_b * (net.s[] - net.loss_correction_t1)
+end
 
-###
-### Potentials and their derivatives
-###
-
-struct Standardizer
-    m::Matrix{Float64}
-    s::Matrix{Float64}
-end
-function Standardizer(x)
-    N = size(x, 2)
-    m = sum(x, dims = 2)/N
-    Standardizer(m,
-                 sqrt.(sum(abs2, x .- m, dims = 2)/(N-1)))
-end
-(s::Standardizer)(x) = (x .- s.m) ./ s.s
-unstandardize(s, x) = x .* s.s .+ s.m
-struct NNet{L, P}
-    s1::Standardizer
-    s2::Standardizer
-    net::L
-    p::P
-end
-function (n::NNet)(x...)
-    for i in eachindex(x)
-        n.net.input[i] = (x[i] - n.s1.m[i]) / n.s1.s[i]
-    end
-    a = n.net(n.p)
-    for i in eachindex(a)
-        a[i] = a[i] * n.s2.s[i] + n.s2.m[i]
-    end
-    a
-end
-struct PotentialApproximator
-    f
-    g #
-    dgdru #
-    d2gdru #
-end
-function Base.show(io::IO, p::PotentialApproximator)
-    print(io, "PotentialApproximator for $(p.f)")
-end
-function load_standardizer(g, f, r; path_pretrained = artifact"approximators")
-    d = unpickle(joinpath(path_pretrained, "standardizers-$g-$f-$r.pt"))
-    Standardizer(d["s1m"], d["s1s"]), Standardizer(d["s2m"], d["s2s"])
-end
-function load_net(g, f, r, layerspec; path_pretrained = artifact"approximators")
-    p = unpickle(joinpath(path_pretrained, "params-$g-$f-$r.pt"))
-    s1, s2 = load_standardizer(g, f, r; path_pretrained)
-    NNet(s1, s2, Net(layers = layerspec,
-                     input = reshape(s1.m, :, 1),
-                     target = reshape(s2.m, :, 1),
-                     verbosity = 0), params(p))
-end
-function load_potential_approximator(f, r = 96;
-        path_pretrained = artifact"approximators",
-        layerspec = ((r, softplus, true), (r, softplus, true), (missing, identity, true)))
-    if !isfile(joinpath(path_pretrained, "params-g3-$f-$r.pt"))
-        error("No pretrained weights found in path $path_pretrained for activation function $f and number of hidden neurons $r")
-    end
-    g3net = load_net(g3, f, r, layerspec)
-    dgrunet = load_net(dgdru, f, r, layerspec)
-    d2grunet = load_net(d2gdru, f, r, layerspec)
-    PotentialApproximator(f, g3net, dgrunet, d2grunet)
-end
-g3(f::PotentialApproximator, r) = g3(f.f, r)
-g3(f::Function, r) = nex(x -> f(r*x)^2)
 g3(::Val{relu}, r) = r^2/2
 g3(::Val{sigmoid2}, r) = 2/pi*asin(r^2/(1 + r^2))
 g3(::Val{cube}, r) = 15r^6
-function g3(f::PotentialApproximator, r1, r2, u)
-    f.g(r1, r2, u)[1]
-end
-function g3(f::Function, r1, r2, u)
-    if isapprox(u, 1, atol = 1e-5)
-        nex(x -> f(r1*x)*f(r2*x))
-    elseif isapprox(u, -1, atol = 1e-5)
-        nex(x -> f(r1*x)*f(-r2*x))
-    else
-        mvnex((x, y) -> f(r1*x)*f(r2*y), u)
-    end
-end
 function g3(::Val{relu}, r1, r2, u)
     if isapprox(u, 1, atol = 1e-5)
         r1*r2/2
@@ -151,46 +465,12 @@ function g3(::Val{relu}, r1, r2, u)
 end
 g3(::Val{sigmoid2}, r1, r2, u) = 2/pi*asin(r1*r2*u/(sqrt(1 + r1^2)*sqrt(1 + r2^2)))
 g3(::Val{cube}, r1, r2, u) = r1^3 * r2^3 * (6u^3 + 9u)
-function dgdr(f::PotentialApproximator, r)
-    dgdr(f.f, r)
-end
-function dgdr(f::Function, r)
-    f′ = deriv(f)
-    nex(x -> 2*f(r*x)*f′(r*x)*x)
-end
 dgdr(::Val{relu}, r) = r
 dgdr(::Val{sigmoid2}, r) = (4*r)/(sqrt(2*r^2 + 1)*(π*r^2 + π))
 dgdr(::Val{cube}, r) = 90*r^5
-function d2gdr(f::PotentialApproximator, r)
-    d2gdr(f.f, r)
-end
-function d2gdr(f::Function, r; kwargs...)
-    f′ = deriv(f)
-    f′′ = second_deriv(f)
-    nex(x -> 2*x^2*(f(r*x)*f′′(r*x)+f′(r*x)^2))
-end
 d2gdr(::Val{relu}, r) = 1
 d2gdr(::Val{sigmoid2}, r) = -(4*(4*r^4 + r^2 - 1))/(π*(r^2 + 1)^2*(2*r^2 + 1)^(3/2))
 d2gdr(::Val{cube}, r) = 450*r^4
-function dgdru(f::PotentialApproximator, r1, r2, u)
-    f.dgdru(r1, r2, u)
-end
-function dgdru(f::Function, r1, r2, u)
-    f′ = deriv(f)
-    if isapprox(u, 1, atol = 1e-5)
-        funcs = (x -> f′(r1 * x)*x*f(r2*x),
-                 x -> r1 * r2 * f′(r1*x)*f′(r2*x))
-        nex(funcs)
-    elseif isapprox(u, -1, atol = 1e-5)
-        funcs = (x -> f′(r1 * x)*x*f(-r2*x),
-                 x -> r1 * r2 * f′(r1*x)*f′(-r2*x))
-        nex(funcs)
-    else
-        funcs = ((x, y) -> f′(r1 * x)*x*f(r2*y),
-                 (x, y) -> r1 * r2 * f′(r1*x)*f′(r2*y))
-        mvnex(funcs, u)
-    end
-end
 function dgdru(::Val{relu}, r1, r2, u)
     r2/(2π)*(sqrt(1-u^2)+(π - acos(u))*u),
     r1*r2/(2π) * (π - acos(u))
@@ -202,38 +482,6 @@ end
 function dgdru(::Val{cube}, r1, r2, u)
     3*r1^2*r2^3*(6u^3+9u),
     r1^3*r2^3*(18*u^2+9)
-end
-function d2gdru(f::PotentialApproximator, r1, r2, u)
-    f.d2gdru(r1, r2, u)
-end
-function d2gdru(f::Function, r1, r2, u)
-    f′ = deriv(f)
-    f′′ = second_deriv(f)
-    if isapprox(u, 1, atol = 1e-5)
-        funcs = (x -> f′′(r1 * x)*x^2*f(r2*x),
-                 x -> f′(r1 * x)*x*f′(r2*x)*x,
-                 x -> r2 * f′(r1*x)*f′(r2*x) + r1*r2*f′′(r1*x)*x*f′(r2*x),
-                 x -> r1 * f′(r1*x)*f′(r2*x) + r1*r2*f′(r1*x)*x*f′′(r2*x),
-                 x -> r1^2 * r2^2 * f′′(r1*x) * f′′(r2*x)
-                )
-        nex(funcs)
-    elseif isapprox(u, -1, atol = 1e-5)
-        funcs = (x -> f′′(r1 * x)*x^2*f(-r2*x),
-                 x -> -f′(r1 * x)*x*f′(-r2*x)*x,
-                 x -> r2 * f′(r1*x)*f′(-r2*x) + r1*r2*f′′(r1*x)*x*f′(-r2*x),
-                 x -> r1 * f′(r1*x)*f′(-r2*x) - r1*r2*f′(r1*x)*x*f′′(-r2*x),
-                 x -> r1^2 * r2^2 * f′′(r1*x) * f′′(-r2*x)
-                )
-        nex(funcs)
-    else
-        funcs = ((x, y) -> f′′(r1 * x)*x^2*f(r2*y),
-                 (x, y) -> f′(r1 * x)*x*f′(r2*y)*y,
-                 (x, y) -> r2 * f′(r1*x)*f′(r2*y) + r1*r2*f′′(r1*x)*x*f′(r2*y),
-                 (x, y) -> r1 * f′(r1*x)*f′(r2*y) + r1*r2*f′(r1*x)*y*f′′(r2*y),
-                 (x, y) -> r1^2 * r2^2 * f′′(r1*x) * f′′(r2*y)
-                )
-        mvnex(funcs, u)
-    end
 end
 function d2gdru(::Val{relu}, r1, r2, u)
     0, # 11
@@ -258,384 +506,149 @@ function d2gdru(::Val{cube}, r1, r2, u)
 end
 
 
-function pairwise(f, x, y)
-    [f(xi, yi) for xi in eachrow(x), yi in eachrow(y)]
-end
-pairwise(f, x) = pairwise(f, x, x)
-similarity(x, y) = clamp(x'*y/(norm(x)*norm(y)), -1, 1)
-function toangles(u)
-    phi = similar(u)
-    n = max(0, 1 - sum(abs2, u))
-    for i in reverse(eachindex(u))
-        n += u[i]^2
-        if u[i] ≈ 0
-            phi[i] = acos(0.)
-        else
-            phi[i] = acos(min(1, u[i]/sqrt(n)))
-        end
-    end
-    phi
-end
-toangles(u::AbstractMatrix) = hcat(toangles.(eachcol(u))...)
-function tosim(phi)
-    s = 1.
-    [begin u = cos(ϕ)*s
-         s *= sin(ϕ)
-         u
-     end
-     for ϕ in phi]
-end
-tosim(phi::AbstractMatrix) = hcat(tosim.(eachcol(phi))...)
-function last_u(u)
-    n = sum(abs2, u)
-    n ≈ 1 && return 0.
-    sqrt(1 - n)
-end
-
-function u_parametrize(x; d = size(x.w1, 2), w = I(d)[1:d-1, :], angles = false)
-    u = pairwise(similarity, w, x.w1)
-    if angles
-        u = toangles(u)
-    end
-    ComponentVector(a = x.w2, r = norm.(eachrow(x.w1)), u = u)
-end
-function w_parametrize(x; d = size(x.u, 1) + 1, w = I(d), angles = false)
-    if angles
-        u = tosim(x.u)
-    else
-        u = x.u
-    end
-    w1 = x.r .* (w[1:d-1, :]'*u .+ last_u.(eachcol(u))' .* w[end, :])'
-    ComponentVector(; w1, w2 = x.a')
-end
-simsim(x, y, i, j, rx, ry) = clamp(sum(x[k, i]*y[k, j] for k in axes(x, 1))/(rx*ry), -1, 1)
-function norm!(r, w)
-    for i in eachindex(r)
-        r[i] = zero(eltype(w))
-        for k in axes(w, 1)
-            r[i] += w[k, i]^2
-        end
-        r[i] = sqrt(r[i])
-    end
-    r
-end
-function _dldw2(i, w2, xt, gr, gs, gt)
+function _dldw2(i, w2, w2t, gr, gs, gt)
     w2[i] * gr[i] +
     (length(w2) > 1 ? sum(w2[k] * gs[i, k] for k in eachindex(w2) if k ≠ i) : 0.) -
-    sum(xt.w2[k] * gt[i, k] for k in axes(xt.w1, 2))
+    sum(w2t[k] * gt[i, k] for k in eachindex(w2t))
 end
-function dgdr!(f, dgr, r)
+@inline function dg0drb!(dg0, g1, f, r, b)
     for i in eachindex(r)
-        dgr[i] = dgdr(f, r[i])
-    end
-end
-function d2gdr!(f, d2gr, r)
-    for i in eachindex(r)
-        d2gr[i] = d2gdr(f, r[i])
-    end
-end
-function dgdru!(f, dgru, r1, r2, u)
-    for i in axes(u, 1), j in axes(u, 2)
-        dgru[i, j][1:2] .= dgdru(f, r1[i], r2[j], u[i, j])
-    end
-end
-function d2gdru!(f, dgru, r1, r2, u)
-    for i in axes(u, 1), j in axes(u, 2)
-        dgru[i, j][3:7] .= d2gdru(f, r1[i], r2[j], u[i, j])
-    end
-end
-struct NetI{F,T1,T2,T3,T4,T5}
-    f::F
-    nparams::Int
-    xt::T1
-    rwt::T5
-    rw1::T2
-    gr::T2
-    dgr::T2
-    d2gr::T2
-    gt::T3
-    gs::T3
-    u::T3
-    v::T3
-    dgru::T4
-    dgrv::T4
-    loss_xt::Float64
-end
-function NetI(x::AbstractVector{T1}, xt::AbstractVector{T2}, f;
-              transpose = true) where {T1, T2}
-    if transpose
-        x = transpose_params(x)
-        xt = transpose_params(xt)
-    end
-    k = length(x.w2)
-    r = length(xt.w2)
-    rwt = zeros(T2, r)
-    norm!(rwt, xt.w1)
-    loss_xt = 0.
-    u = pairwise(similarity, xt.w1')
-    for i in 1:r
-        loss_xt += xt.w2[i]^2 * g3(f, rwt[i])/2
-        for j in i+1:r
-            loss_xt += xt.w2[i] * xt.w2[j] * g3(f, rwt[i], rwt[j], u[i, j])
+        dg0[i, 1] = integrate(∂rϕ(), g1.w, g1.x, f, r[i], _bias(b, i))
+        if !isnothing(b)
+            dg0[i, 2] = integrate(∂bϕ(), g1.w, g1.x, f, r[i], _bias(b, i))
         end
     end
-    NetI(f,
-         length(x),
-         xt,
-          rwt,
-          zeros(T1, k),
-          zeros(T1, k),
-          zeros(T1, k),
-          zeros(T1, k),
-          zeros(T1, k, r),
-          ones(T1, k, k),
-          zeros(T1, k, r),
-          ones(T1, k, k),
-          [zeros(T1, 7) for _ in 1:k, __ in 1:r],
-          [zeros(T1, 7) for _ in 1:k, __ in 1:k],
-          loss_xt
-         )
 end
-input_dim(net::NetI) = size(net.xt.w1, 1)
-function Base.show(io::IO, net::NetI)
-    println(io, "Network with nonlinearity \"$(net.f)\" and $(input_dim(net))D gaussian input")
-    print(io, "student width = $(size(net.u, 1)), teacher width = $(size(net.u, 2))")
+@inline function dgdrb!(dgr, g1, f, r, b)
+    for i in eachindex(r)
+        dgr[i, 1] = integrate(∂rϕϕ(), g1.w, g1.x, f, r[i], _bias(b, i))
+        if !isnothing(b)
+            dgr[i, 2] = integrate(∂bϕϕ(), g1.w, g1.x, f, r[i], _bias(b, i))
+        end
+    end
+end
+@inline function dgdrub!(dgru, g2, f1, r1, b1, f2, r2, b2, u)
+    for i in axes(u, 1), j in axes(u, 2)
+        _u =  u[i, j]
+        _u′ = sqrt(1 - u[i, j]^2)
+        dgru[i, j, 1] = integrate(∂r₁ϕϕ(), g2.w, g2.x, f1, r1[i], _bias(b1, i), f2, r2[j], _bias(b2, j), _u, _u′)
+        dgru[i, j, 2] = integrate(∂uϕϕ(), g2.w, g2.x, f1, r1[i], _bias(b1, i), f2, r2[j], _bias(b2, j), _u, _u′)
+        if !isnothing(b1)
+            dgru[i, j, 3] = integrate(∂b₁ϕϕ(), g2.w, g2.x, f1, r1[i], _bias(b1, i), f2, r2[j], _bias(b2, j), _u, _u′)
+        end
+    end
+end
+@inline function dgdrvb!(dgru, g2, f, r, b, u)
+    for i in axes(u, 1), j in axes(u, 2)
+        j ≤ i && continue
+        _u =  u[i, j]
+        _u′ = sqrt(1 - _u^2)
+        dgru[i, j, 1] = integrate(∂r₁ϕϕ(), g2.w, g2.x, f, r[i], _bias(b, i), f, r[j], _bias(b, j), _u, _u′)
+        dgru[j, i, 1] = integrate(∂r₁ϕϕ(), g2.w, g2.x, f, r[j], _bias(b, j), f, r[i], _bias(b, i), _u, _u′)
+        dgru[i, j, 2] = dgru[j, i, 2] = integrate(∂uϕϕ(), g2.w, g2.x, f, r[i], _bias(b, i), f, r[j], _bias(b, j), _u, _u′)
+        if !isnothing(b)
+            dgru[i, j, 3] = integrate(∂b₁ϕϕ(), g2.w, g2.x, f, r[i], _bias(b, i), f, r[j], _bias(b, j), _u, _u′)
+            dgru[j, i, 3] = integrate(∂b₁ϕϕ(), g2.w, g2.x, f, r[j], _bias(b, j), f, r[i], _bias(b, i), _u, _u′)
+        end
+    end
+end
+@inline function d2g0drb!(dg0, g1, f, r, b)
+    for i in eachindex(r)
+        dg0[i, 3] = integrate(∂r∂rϕ(), g1.w, g1.x, f, r[i], _bias(b, i))
+        if !isnothing(b)
+            dg0[i, 4] = integrate(∂b∂bϕ(), g1.w, g1.x, f, r[i], _bias(b, i))
+            dg0[i, 5] = integrate(∂r∂bϕ(), g1.w, g1.x, f, r[i], _bias(b, i))
+        end
+    end
+end
+@inline function d2gdrb!(dgr, g1, f, r, b)
+    for i in eachindex(r)
+        dgr[i, 3] = integrate(∂r∂rϕϕ(), g1.w, g1.x, f, r[i], _bias(b, i))
+        if !isnothing(b)
+            dgr[i, 4] = integrate(∂b∂bϕϕ(), g1.w, g1.x, f, r[i], _bias(b, i))
+            dgr[i, 5] = integrate(∂r∂bϕϕ(), g1.w, g1.x, f, r[i], _bias(b, i))
+        end
+    end
+end
+@inline function d2gdrvb!(dgrv, g2, f, r, b, v)
+    for i in axes(v, 1), j in axes(v, 2)
+        j ≤ i && continue
+        _v = v[i, j]
+        _v′ = sqrt(1 - _v^2)
+        dgrv[i, j, 4] = integrate(∂r₁∂r₁ϕϕ(), g2.w, g2.x, f, r[i], _bias(b, i), f, r[j], _bias(b, j), _v, _v′)
+        dgrv[j, i, 4] = integrate(∂r₁∂r₁ϕϕ(), g2.w, g2.x, f, r[j], _bias(b, j), f, r[i], _bias(b, i), _v, _v′)
+        dgrv[i, j, 5] = dgrv[j, i, 5] = integrate(∂r₁∂r₂ϕϕ(), g2.w, g2.x, f, r[i], _bias(b, i), f, r[j], _bias(b, j), _v, _v′)
+        dgrv[i, j, 6] = dgrv[j, i, 7] = integrate(∂r₁∂uϕϕ(), g2.w, g2.x, f, r[i], _bias(b, i), f, r[j], _bias(b, j), _v, _v′)
+        dgrv[j, i, 6] = dgrv[i, j, 7] = integrate(∂r₁∂uϕϕ(), g2.w, g2.x, f, r[j], _bias(b, j), f, r[i], _bias(b, i), _v, _v′)
+        dgrv[i, j, 8] = dgrv[j, i, 8] = integrate(∂u∂uϕϕ(), g2.w, g2.x, f, r[i], _bias(b, i), f, r[j], _bias(b, j), _v, _v′)
+        if !isnothing(b)
+            dgrv[i, j, 9] = integrate(∂b₁∂b₁ϕϕ(), g2.w, g2.x, f, r[i], _bias(b, i), f, r[j], _bias(b, j), _v, _v′)
+            dgrv[j, i, 9] = integrate(∂b₁∂b₁ϕϕ(), g2.w, g2.x, f, r[j], _bias(b, j), f, r[i], _bias(b, i), _v, _v′)
+            dgrv[i, j, 10] = dgrv[j, i, 10] = integrate(∂b₁∂b₂ϕϕ(), g2.w, g2.x, f, r[i], _bias(b, i), f, r[j], _bias(b, j), _v, _v′)
+            dgrv[i, j, 11] = integrate(∂r₁∂b₁ϕϕ(), g2.w, g2.x, f, r[i], _bias(b, i), f, r[j], _bias(b, j), _v, _v′)
+            dgrv[j, i, 11] = integrate(∂r₁∂b₁ϕϕ(), g2.w, g2.x, f, r[j], _bias(b, j), f, r[i], _bias(b, i), _v, _v′)
+            dgrv[i, j, 12] = integrate(∂r₂∂b₁ϕϕ(), g2.w, g2.x, f, r[i], _bias(b, i), f, r[j], _bias(b, j), _v, _v′)
+            dgrv[j, i, 12] = integrate(∂r₂∂b₁ϕϕ(), g2.w, g2.x, f, r[j], _bias(b, j), f, r[i], _bias(b, i), _v, _v′)
+            dgrv[i, j, 13] = integrate(∂b₁∂uϕϕ(), g2.w, g2.x, f, r[i], _bias(b, i), f, r[j], _bias(b, j), _v, _v′)
+            dgrv[j, i, 13] = integrate(∂b₁∂uϕϕ(), g2.w, g2.x, f, r[j], _bias(b, j), f, r[i], _bias(b, i), _v, _v′)
+        end
+    end
+end
+@inline function d2gdrub!(dgru, g2, f1, r1, b1, f2, r2, b2, u)
+    for i in axes(u, 1), j in axes(u, 2)
+        _u = u[i, j]
+        _u′ = sqrt(1 - _u^2)
+        dgru[i, j, 4] = integrate(∂r₁∂r₁ϕϕ(), g2.w, g2.x, f1, r1[i], _bias(b1, i), f2, r2[j], _bias(b2, j), _u, _u′)
+        dgru[i, j, 6] = integrate(∂r₁∂uϕϕ(), g2.w, g2.x, f1, r1[i], _bias(b1, i), f2, r2[j], _bias(b2, j), _u, _u′)
+        dgru[i, j, 8] = integrate(∂u∂uϕϕ(), g2.w, g2.x, f1, r1[i], _bias(b1, i), f2, r2[j], _bias(b2, j), _u, _u′)
+        if !isnothing(b1)
+            dgru[i, j, 9] = integrate(∂b₁∂b₁ϕϕ(), g2.w, g2.x, f1, r1[i], _bias(b1, i), f2, r2[j], _bias(b2, j), _u, _u′)
+            dgru[i, j, 10] = integrate(∂r₁∂b₁ϕϕ(), g2.w, g2.x, f1, r1[i], _bias(b1, i), f2, r2[j], _bias(b2, j), _u, _u′)
+            dgru[i, j, 11] = integrate(∂b₁∂uϕϕ(), g2.w, g2.x, f1, r1[i], _bias(b1, i), f2, r2[j], _bias(b2, j), _u, _u′)
+        end
+    end
 end
 _ind(i, D) = (((i-1)÷D)+1, (i-1)%D+1)
-function _dc(w1, r1, w2, r2, u, dgru, k, j, l, m, n)
+function _dc2(w1, r1, w2, r2, u, dgru, k, j, l, m, n)
     tmp = 0.
     if k == m
-        ∂rₖₗ = _drw(w1, r1, k, l)
-        ∂vₖⱼwₖₗ = _dvw(w1, r1, w2, r2, u, k, l, j)
-        ∂vₖⱼwₘₙ = _dvw(w1, r1, w2, r2, u, k, n, j)
-        ∂rₘₙ = _drw(w1, r1, m, n)
-        tmp += (dgru[k, j][3] * ∂rₘₙ + dgru[k, j][5] * ∂vₖⱼwₘₙ) * ∂rₖₗ
-        tmp -= dgru[k, j][1] * w1[l, k]*w1[n, m]/r1[k]^3
-        tmp += (dgru[k, j][5] * ∂rₘₙ  + dgru[k, j][7] * ∂vₖⱼwₘₙ) * ∂vₖⱼwₖₗ
-        tmp += dgru[k, j][2] * (-w2[l, j]*w1[n, m]/(r1[m]^3*r2[j]) -
-                                 w1[l, k]/r1[m]^2*∂vₖⱼwₘₙ +
-                                 2*w1[l, k]*u[k, j]/r1[m]^3*∂rₘₙ)
+        ∂rₖₗ = _drw2(w1, r1, k, l)
+        ∂vₖⱼwₖₗ = _dvw2(w1, r1, w2, r2, u, k, l, j)
+        ∂vₖⱼwₘₙ = _dvw2(w1, r1, w2, r2, u, k, n, j)
+        ∂rₘₙ = _drw2(w1, r1, m, n)
+        tmp += (dgru[k, j, 4] * ∂rₘₙ + dgru[k, j, 6] * ∂vₖⱼwₘₙ) * ∂rₖₗ
+        tmp -= dgru[k, j, 1] * w1[k, l]*w1[m, n]/r1[k]^3
+        tmp += (dgru[k, j, 6] * ∂rₘₙ  + dgru[k, j, 8] * ∂vₖⱼwₘₙ) * ∂vₖⱼwₖₗ
+        tmp += dgru[k, j, 2] * (-w2[j, l]*w1[m, n]/(r1[m]^3*r2[j]) -
+                                 w1[k, l]/r1[m]^2*∂vₖⱼwₘₙ +
+                                 2*w1[k, l]*u[k, j]/r1[m]^3*∂rₘₙ)
         if l == n
-            tmp -= dgru[k, j][2]*u[k, j]/r1[k]^2
-            tmp += dgru[k, j][1]/r1[k]
+            tmp -= dgru[k, j, 2]*u[k, j]/r1[k]^2
+            tmp += dgru[k, j, 1]/r1[k]
         end
     elseif j == m
-        ∂rₖₗ = _drw(w1, r1, k, l)
-        ∂vₖⱼwₘₙ = (w1[n, k]/(r1[k]*r1[m]) - w1[n, m]*u[k, m]/r1[m]^2)
-        ∂vₖⱼwₖₗ = _dvw(w1, r1, w2, r2, u, k, l, j)
-        ∂rₘₙ = _drw(w1, r1, m, n)
-        tmp += (dgru[k, j][4] * ∂rₘₙ + dgru[k, j][5] * ∂vₖⱼwₘₙ) * ∂rₖₗ
-        tmp += (dgru[k, j][6] * ∂rₘₙ + dgru[k, j][7] * ∂vₖⱼwₘₙ) * ∂vₖⱼwₖₗ
-        tmp += dgru[k, j][2] * (-w1[l, m]/(r1[k]*r1[m]^2)*∂rₘₙ-w1[l, k]/r1[k]^2*∂vₖⱼwₘₙ)
+        ∂rₖₗ = _drw2(w1, r1, k, l)
+        ∂vₖⱼwₘₙ = (w1[k, n]/(r1[k]*r1[m]) - w1[m, n]*u[k, m]/r1[m]^2)
+        ∂vₖⱼwₖₗ = _dvw2(w1, r1, w2, r2, u, k, l, j)
+        ∂rₘₙ = _drw2(w1, r1, m, n)
+        tmp += (dgru[k, j, 5] * ∂rₘₙ + dgru[k, j, 6] * ∂vₖⱼwₘₙ) * ∂rₖₗ
+        tmp += (dgru[k, j, 7] * ∂rₘₙ + dgru[k, j, 8] * ∂vₖⱼwₘₙ) * ∂vₖⱼwₖₗ
+        tmp += dgru[k, j, 2] * (-w1[m, l]/(r1[k]*r1[m]^2)*∂rₘₙ-w1[k, l]/r1[k]^2*∂vₖⱼwₘₙ)
         if l == n && r1 === r2
-            tmp += dgru[k, j][2]/(r1[k]*r1[m])
+            tmp += dgru[k, j, 2]/(r1[k]*r1[m])
         end
     end
     tmp
 end
-function hessian(net::NetI, x; transpose = true, kwargs...)
-    h = zeros(net.nparams, net.nparams)
-    if transpose
-        idxs = [reshape(reshape(1:length(x.w1), :, size(x.w1, 1))', :);
-                length(x.w1)+1:length(x)]
-        x = transpose_params(x)
-    end
-    hessian!(h, net, x; kwargs...)
-    if transpose
-        h .= h[idxs, idxs]
-    end
-    h
-end
-function hessian!(h, net::NetI, x; forward = true, backprop = true, kwargs...)
-    hess_u!(net.f, h, x, net; forward, backprop)
-    h .*= 2
-end
-function hess_u!(f, H, x, net; backprop = true, forward = true)
-    (; rw1, xt, rwt, gr, gs, u, v, dgr, d2gr, dgru, dgrv) = net
-    forward && _loss(f, x, net)
-    backprop && backprop!(net, x; forward = false)
-    d2gdru!(f, dgru, rw1, rwt, u)
-    d2gdru!(f, dgrv, rw1, rw1, v)
-    d2gdr!(f, d2gr, rw1)
-    w1 = x.w1; w2 = x.w2
-    D = size(w1, 1)
-    N1 = length(w1);
-    for i in eachindex(w2), j in eachindex(w2)
-        if i == j
-            H[N1+i, N1+j] = gr[i]
-        else
-            H[N1+i, N1+j] = gs[i, j]
-        end
-    end
-    for i in eachindex(w1), j in eachindex(w2)
-        tmp = 0.
-        i1, i2 = _ind(i, D)
-        if i1 == j
-            tmp = w2[j]*dgr[j]*w1[i]/rw1[j]
-            for k in axes(xt.w1, 2)
-                tmp -= xt.w2[k]*_c(w1, rw1, xt.w1, rwt, u, dgru, i1, i2, k)
-            end
-            for k in axes(w1, 2)
-                k == i1 && continue
-                tmp += w2[k]*_c(w1, rw1, w1, rw1, v, dgrv, i1, i2, k)
-            end
-        else
-            tmp = w2[i1]*_c(w1, rw1, w1, rw1, v, dgrv, i1, i2, j)
-        end
-        H[i, N1 + j] = H[N1 + j, i] = tmp
-    end
-    for i in eachindex(w1), j in eachindex(w1)
-        tmp = 0.
-        j > i && continue
-        i1, i2 = _ind(i, D)
-        j1, j2 = _ind(j, D)
-        if i1 == j1
-            tmp = 1/2*w2[i1]^2*(d2gr[i1]*_drw(w1, rw1, i1, i2)*_drw(w1, rw1, j1, j2) -
-                                dgr[i1]*w1[i]*w1[j]/rw1[i1]^3)
-            if i2 == j2
-                tmp += 1/2*w2[i1]^2*dgr[i1]/rw1[i1]
-            end
-            for k in eachindex(w2)
-                k == j1 && continue
-                tmp += w2[k]*w2[j1]*_dc(w1, rw1, w1, rw1, v, dgrv, i1, k, i2, j1, j2)
-            end
-            for k in eachindex(xt.w2)
-                tmp -= xt.w2[k]*w2[j1]*_dc(w1, rw1, xt.w1, rwt, u, dgru, i1, k, i2, j1, j2)
-            end
-        else
-            tmp = w2[i1]*w2[j1]*_dc(w1, rw1, w1, rw1, v, dgrv, i1, j1, i2, j1, j2)
-        end
-        H[i, j] = H[j, i] = tmp
-    end
-end
 """
 ∂rᵢ/∂wᵢⱼ
 """
-_drw(w, r, i, j) = w[j, i]/r[i]
+_drw2(w, r, i, j) = w[i, j]/r[i]
 """
 ∂uᵢₖ/∂wᵢⱼ
 """
-_dvw(wi, ri, wj, rj, u, i, j, k) = (wj[j, k]/(ri[i]*rj[k]) - wi[j, i]*u[i, k]/ri[i]^2)
+_dvw2(wi, ri, wj, rj, u, i, j, k) = (wj[k, j]/(ri[i]*rj[k]) - wi[i, j]*u[i, k]/ri[i]^2)
 function _c(wi, ri, wj, rj, u, dgru, i, j, k)
-    (dgru[i, k][1] * _drw(wi, ri, i, j) +
-     dgru[i, k][2] * _dvw(wi, ri, wj, rj, u, i, j, k))
-end
-function gradient(net::NetI, x; transpose = true, kwargs...)
-    checkparams(net, x)
-    dx = zero(x)
-    if transpose
-        x = transpose_params(x)
-        dxt = transpose_params(dx)
-    else
-        dxt = dx
-    end
-    gradient!(dxt, net, x; kwargs...)
-    if transpose
-        dx .= transpose_params(dxt)
-    end
-    dx
-end
-function gradient!(dx, net::NetI, x; forward = true, kwargs...)
-    grad_u!(dx, x, net; forward)
-    dx .*= 2
-end
-function backprop!(net::NetI, x; forward = true)
-    (; rw1, rwt, u, v, dgr, dgru, dgrv) = net
-    f = net.f
-    forward && _loss(f, x, net)
-    dgdr!(f, dgr, rw1)
-    dgdru!(f, dgru, rw1, rwt, u)
-    dgdru!(f, dgrv, rw1, rw1, v)
-end
-function grad_u!(dx, x, net; forward = true, backprop = true)
-    backprop && backprop!(net, x; forward)
-    (; rw1, xt, rwt, gr, gt, gs, u, v, dgr, dgru, dgrv) = net
-    w1 = x.w1; w2 = x.w2
-    for i in eachindex(w2)
-        dx.w2[i] = _dldw2(i, w2, xt, gr, gs, gt)
-        for j in axes(w1, 1)
-            dx.w1[j, i] = 1/2*w2[i]^2*dgr[i]/rw1[i]*w1[j, i]
-            for k in axes(xt.w1, 2)
-                dx.w1[j, i] -= w2[i]*xt.w2[k]*_c(w1, rw1, xt.w1, rwt, u, dgru, i, j, k)
-            end
-            for k in axes(w1, 2)
-                k == i && continue
-                dx.w1[j, i] += w2[i]*w2[k]*_c(w1, rw1, w1, rw1, v, dgrv, i, j, k)
-            end
-        end
-    end
-end
-function loss(net::NetI, x; transpose = true,
-              losstype = :mse, forward = true, kwargs...)
-    if transpose
-        x = transpose_params(x)
-    end
-    _loss(net, x; losstype, forward)
-end
-function _loss(net::NetI, x;
-               forward = false, losstype = :mse, kwargs...)
-    res = _loss(net.f, x, net; forward) + net.loss_xt
-    losstype == :rmse && return sqrt(2*res)
-    losstype == :mse && return 2*res
-    error("Losstype $losstype unkown.")
-end
-function _loss(f, x, net; forward = true)
-    (; rw1, xt, rwt, gr, gt, gs, u, v) = net
-    w1 = x.w1; w2 = x.w2
-    norm!(rw1, w1)
-    res = 0.
-    for i in eachindex(w2)
-        if forward
-            gr[i] = g3(f, rw1[i])
-        end
-        res += w2[i]^2 * gr[i]/2
-        for j in axes(xt.w1, 2)
-            if forward
-                u[i, j] = simsim(w1, xt.w1, i, j, rw1[i], rwt[j])
-                gt[i, j] = g3(f, rw1[i], rwt[j], u[i, j])
-            end
-            res -= w2[i] * xt.w2[j] * gt[i, j]
-        end
-        for j in i+1:length(w2)
-            if forward
-                v[i, j] = v[j, i] = simsim(w1, w1, i, j, rw1[i], rw1[j])
-                gs[i, j] = gs[j, i] = g3(f, rw1[i], rw1[j], v[i, j])
-            end
-            res += w2[i]*w2[j] * gs[i, j]
-        end
-    end
-    res
-end
-
-###
-### Training
-###
-
-transpose_params(p) = ComponentVector(w1 = Array(p.w1'), w2 = reshape(p.w2, :)')
-function train(net::NetI, p;
-               maxnorm = Inf,
-               loss_scale = 1.,
-               verbosity = 1,
-               losstype = :mse,
-               transpose = true,
-               minloss = 0,
-               kwargs...)
-    checkparams(net, p)
-    if transpose
-        x = transpose_params(p)
-    else
-        x = p
-    end
-    _, g!, h!, fgh!, fg! = get_functions(net, maxnorm;
-                                         hessian_template = nothing,
-                                         scale = loss_scale,
-#                                          batcher = FullBatch(1:1),
-                                         losstype = :mse,
-                                         verbosity)
-    lossfunc = u -> loss(net, u; losstype, transpose = false)
-    train(net, lossfunc, g!, h!, fgh!, fg!, x;
-          loss_scale, verbosity, losstype, transpose_solution = transpose,
-          use_component_arrays = true,
-          minloss,
-          kwargs...)
+    dgru[i, k, 1] * _drw2(wi, ri, i, j) +
+    dgru[i, k, 2] * _dvw2(wi, ri, wj, rj, u, i, j, k)
 end
