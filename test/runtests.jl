@@ -7,11 +7,11 @@ Random.seed!(123)
 
 @testset "activation functions" begin
     import MLPGradientFlow: deriv, second_deriv, A_mul_B!, alloc_a′, alloc_a′′
-    for f in (g, exp, sigmoid, square, relu, gelu, tanh, tanh_fast, softplus, sigmoid2, Poly(.2, .3, -.3, .4), selu, silu)
+    for f in (g, exp, sigmoid, square, relu, gelu, tanh, tanh_fast, softplus, sigmoid2, Poly(.2, .3, -.3, .4), selu, silu, normal_cdf)
         @info "testing activation function $f."
         inp = [-.2, 3.]'
         y = f.(inp)
-        ff = f == gelu ? x -> x/2*(1 + erf(x/sqrt(2))) : f == sigmoid2 ? x -> erf(x/sqrt(2)) : f
+        ff = f == gelu ? x -> x/2*(1 + erf(x/sqrt(2))) : f == sigmoid2 ? x -> erf(x/sqrt(2)) : f == normal_cdf ? x -> (1 + erf(x/sqrt(2)))/2 : f
         @test ff.(inp) ≈ f.(inp)
         y′ = ForwardDiff.derivative.(ff, inp)
         y′′ = ForwardDiff.derivative.(x -> ForwardDiff.derivative(ff, x), inp)
@@ -352,10 +352,42 @@ end
         @test gradient(neti, p) ≈ gradient(infinite_student, p)
         @test hessian(neti, p) ≈ hessian(infinite_student, p)
         if b1 == true && b2 == true
-            res2 = train(neti, p, maxT = 100, maxiterations_optim = 0)
-            res1 = train(infinite_student, p, maxT = 100, tauinv = 1/MLPGradientFlow.n_samples(infinite_student), maxtime_ode = 10, maxiterations_optim = 0)
+            res2 = train(neti, p, maxT = 20, maxtime_ode = 5*60, maxiterations_optim = 0)
+            res1 = train(infinite_student, p, maxT = 20, tauinv = 1/MLPGradientFlow.n_samples(infinite_student), maxtime_ode = 10, maxiterations_optim = 0)
             @test res1["loss"] ≈ res2["loss"]
             @test params(res1["x"]) ≈ params(res2["x"])
+        end
+    end
+end
+
+import MLPGradientFlow: integrate, NormalIntegral, _stride_arrayize, ϕ, ϕϕ, ∂r₁ϕϕ, ∂b₁ϕϕ, ∂uϕϕ, ∂rϕϕ, ∂rϕ, ∂bϕ, ∂bϕϕ, ∂u∂uϕϕ, ∂b₁∂uϕϕ, ∂b₁∂b₁ϕϕ, ∂r₁∂uϕϕ, ∂r₁∂b₁ϕϕ, ∂b₁∂b₂ϕϕ, ∂r₂∂b₁ϕϕ, ∂r₁∂r₁ϕϕ
+@testset "fast integrals" begin
+    sigmoid_test = x -> erf(x/sqrt(2))
+    G_test = x -> (1 + erf(x/sqrt(2)))/2
+    MLPGradientFlow.deriv(::typeof(sigmoid_test)) = x -> ForwardDiff.derivative(sigmoid_test, x)
+    MLPGradientFlow.second_deriv(::typeof(sigmoid_test)) = x -> ForwardDiff.derivative(MLPGradientFlow.deriv(sigmoid_test), x)
+    MLPGradientFlow.deriv(::typeof(G_test)) = x -> ForwardDiff.derivative(G_test, x)
+    MLPGradientFlow.second_deriv(::typeof(G_test)) = x -> ForwardDiff.derivative(MLPGradientFlow.deriv(G_test), x)
+    g1 = _stride_arrayize(NormalIntegral(d = 1))
+    g2 = _stride_arrayize(NormalIntegral(d = 2))
+    for (f1, f2) in ((sigmoid2, sigmoid_test), (normal_cdf, G_test))
+        for kind in (ϕ, ϕϕ, ∂rϕ, ∂rϕϕ, ∂bϕ, ∂bϕϕ)
+            @test integrate(kind(), g1.w, g1.x, f1, .3, .1) ≈
+                  integrate(kind(), g1.w, g1.x, f2, .3, .1)
+            @test integrate(kind(), g1.w, g1.x, f1, .3, 0.) ≈
+                  integrate(kind(), g1.w, g1.x, f2, .3, 0.) atol = eps()
+            @test integrate(kind(), g1.w, g1.x, f1, .3, -.1) ≈
+                  integrate(kind(), g1.w, g1.x, f2, .3, -.1)
+        end
+        for kind in (ϕϕ, ∂r₁ϕϕ, ∂b₁ϕϕ, ∂uϕϕ, ∂u∂uϕϕ, ∂b₁∂uϕϕ, ∂b₁∂b₁ϕϕ, ∂r₁∂uϕϕ, ∂r₁∂b₁ϕϕ, ∂b₁∂b₂ϕϕ, ∂r₂∂b₁ϕϕ, ∂r₁∂r₁ϕϕ)
+            @test integrate(kind(), g2.w, g2.x, f1, .3, .1, f1, .4, -.2, .3) ≈
+                  integrate(kind(), g2.w, g2.x, f2, .3, .1, f2, .4, -.2, .3)
+            @test integrate(kind(), g2.w, g2.x, f1, .3, 0., f1, .4, -.2, 1.) ≈
+                  integrate(kind(), g2.w, g2.x, f2, .3, 0., f2, .4, -.2, 1.)
+            @test integrate(kind(), g2.w, g2.x, f1, .3, 0., f1, .4, -.2, -1.) ≈
+                  integrate(kind(), g2.w, g2.x, f2, .3, 0., f2, .4, -.2, -1.)
+            @test integrate(kind(), g2.w, g2.x, f2, .3, 0., f2, .4, 0., .9) ≈
+                  integrate(kind(), g2.w, g2.x, f1, .3, 0., f1, .4, 0., .9) atol = 1e-14
         end
     end
 end

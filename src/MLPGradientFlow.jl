@@ -8,7 +8,7 @@ using NLopt, Sundials
 
 export Net, NetI, TeacherNet, Adam, Descent, FullBatch, MiniBatch
 export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict, gauss_hermite_net
-export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube, Poly, selu, silu, tanh_fast
+export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube, Poly, selu, silu, tanh_fast, normal_cdf
 export pickle, unpickle
 
 ###
@@ -36,16 +36,16 @@ second_deriv(p::Poly) = deriv(deriv(p))
 silu(x) = x*sigmoid(x)
 deriv(::typeof(silu)) = silu′
 second_deriv(::typeof(silu)) = silu′′
-function silu′(x::T, y) where T
-    s = IfElse.ifelse(x == 0, T(0.5), y/x)
+function silu′(x, y)
+    s = IfElse.ifelse(x == 0, 0.5, y/x)
     x*sigmoid′(x, s) + s
 end
 function silu′(x)
     s = sigmoid(x)
     x*sigmoid′(x, s) + s
 end
-function silu′′(x::T, y, y′) where T
-    s = IfElse.ifelse(x == 0, T(.5), y/x)
+function silu′′(x, y, y′)
+    s = IfElse.ifelse(x == 0, .5, y/x)
     s′ = sigmoid′(x, s)
     x*sigmoid′′(x, s, s′) + 2*s′
 end
@@ -55,13 +55,13 @@ function silu′′(x)
     x*sigmoid′′(x, s, s′) + 2*s′
 end
 
-selu(x::T) where T = T(1.05070098)*IfElse.ifelse(x > 0, x, T(1.67326324) * (exp(x) - 1))
+selu(x) = 1.05070098*IfElse.ifelse(x > 0, x, 1.67326324 * (exp(x) - 1))
 deriv(::typeof(selu)) = selu′
 second_deriv(::typeof(selu)) = selu′′
 selu′(x, y) = selu′(x)
-selu′(x::T) where T = T(1.05070098)*IfElse.ifelse(x > 0, one(T), T(1.67326324) * exp(x))
+selu′(x) = 1.05070098*IfElse.ifelse(x > 0, 1, 1.67326324 * exp(x))
 selu′′(x, y, y′) = selu′′(x)
-selu′′(x::T) where T = IfElse.ifelse(x > 0, zero(T), T(1.05070098*1.67326324) * exp(x))
+selu′′(x) = IfElse.ifelse(x > 0, 0, 1.05070098*1.67326324 * exp(x))
 
 const sigmoid = sigmoid_fast
 deriv(::typeof(sigmoid_fast)) = sigmoid′
@@ -106,6 +106,8 @@ g′′(x) = 16*sigmoid′′(4x) + sigmoid′(x)
 
 const invsqrt2 = 1/sqrt(2)
 const invsqrtπ = 1/sqrt(π)
+const inv2π = 1/(2*π)
+const inv4π = 1/(4*π)
 const gelu = SLEEFPirates.gelu
 gelu′(x, y) = IfElse.ifelse(x == 0, 0.5, y/x) + x*invsqrtπ*invsqrt2*Base.exp(-x^2/2)
 gelu′(x) = gelu′(x, gelu(x))
@@ -141,13 +143,23 @@ function tanh′′(x)
     tanh′′(x, y, tanh′(x, y))
 end
 
-sigmoid2(x::T) where T = erf(x * T(0.7071067811865476))
+sigmoid2(x) = erf(x * 0.7071067811865476)
 deriv(::typeof(sigmoid2)) = sigmoid2′
 second_deriv(::typeof(sigmoid2)) = sigmoid2′′
-sigmoid2′(x::T) where T = T(0.7978845608028654) * Base.exp(-x^2/2)
+sigmoid2′(x) = 0.7978845608028654 * Base.exp(-x^2/2)
 sigmoid2′(x, y) = sigmoid2′(x)
 sigmoid2′′(x, y, y′) = -x*y′
-sigmoid2′′(x::T) where T = sigmoid2′′(x, zero(T), sigmoid2′(x))
+sigmoid2′′(x) = sigmoid2′′(x, 0, sigmoid2′(x))
+
+normal_cdf(x) = (1 + sigmoid2(x))/2
+deriv(::typeof(normal_cdf)) = normal_cdf′
+second_deriv(::typeof(normal_cdf)) = normal_cdf′′
+normal_cdf′(x) = sigmoid2′(x)/2
+normal_cdf′(x, y) = sigmoid2′(x, y)/2
+normal_cdf′′(x, y, y′) = sigmoid2′′(x, y, 2*y′)/2
+normal_cdf′′(x) = sigmoid2′′(x)/2
+normal_pdf(x) = normal_cdf′(x)
+
 
 deriv(::typeof(identity)) = identity′
 second_deriv(::typeof(identity)) = identity′′
@@ -430,7 +442,7 @@ end
 """
     TeacherNet(; p = nothing, input, kwargs...)
 
-Creates a network with parameters `p` attached. If `p == nothing`, [`random_params`](@href) are generated.
+Creates a network with parameters `p` attached. If `p == nothing`, [`random_params`](@ref) are generated.
 A `TeacherNet` is a callable object that returns the target given some input.
 
 # Example
@@ -467,6 +479,8 @@ end
 
 include("normal_integrals.jl")
 include("gaussian_input.jl")
+include("owent.jl")
+include("utils.jl")
 
 
 ###
@@ -564,7 +578,7 @@ function _loss(net, x;
         res += (nx - maxnorm)^3/3 * n_samples(net)
     end
     if merge !== nothing
-        w1 = getweights(net.layers[merge.layer], x)
+        w1 = getweights(layers(net)[merge.layer], x)
         λ = merge.lambda/2 * n_samples(net)
         i, j = merge.pair
         for k in indices(w1, 2)
@@ -703,7 +717,7 @@ function gradient!(dx, net, x;
                    nx = weightnorm(x),
                    maxnorm = Inf,
                    merge = nothing,
-                   weights = net.weights,
+                   weights = isa(net, Net) ? net.weights : nothing,
                    losstype = MSE(),
                    derivs = 1)
     _gradient!(dx, net, x; forward, weights, derivs, losstype)
@@ -711,8 +725,8 @@ function gradient!(dx, net, x;
         dx .+= (nx - maxnorm)^2*x/length(x) * n_samples(net)
     end
     if merge !== nothing
-        dw = getweights(net.layers[merge.layer], dx)
-        w = getweights(net.layers[merge.layer], x)
+        dw = getweights(layers(net)[merge.layer], dx)
+        w = getweights(layers(net)[merge.layer], x)
         λ = merge.lambda * n_samples(net)
         i, j = merge.pair
         for k in indices(w, 2)
@@ -727,11 +741,11 @@ end
 
 Compute the gradient of `net` at parameter value `x`.
 """
-function gradient(net::Net, x; kwargs...)
+function gradient(net, x; kwargs...)
     checkparams(net, x)
     dx = zero(x)
     gradient!(dx, net, x; kwargs...)
-    dx ./= size(net.input, 2)
+    dx ./= n_samples(net)
 end
 
 function forward_g!(g, prev, layers, x, offset = StaticInt(0))
@@ -973,7 +987,8 @@ end
 function hessian!(h, net, x;
                   forward = true, backprop = true,
                   losstype = MSE(), derivs = 2,
-                  nx = weightnorm(x), maxnorm = Inf, merge = nothing, weights = net.weights)
+                  nx = weightnorm(x), maxnorm = Inf, merge = nothing,
+                  weights = isa(net, Net) ? net.weights : nothing)
     hflat = _hessian!(h, net, x; forward, backprop, losstype, weights, derivs)
     if merge !== nothing # doesn't work for NetI
         λ = merge.lambda * n_samples(net)
@@ -1015,10 +1030,10 @@ Hessian(::Nothing, H) = H
 
 Compute hessian of `net` at parameter value `x`.
 """
-function hessian(net::Net, x; kwargs...)
+function hessian(net, x; only_flat = isa(net, NetI), kwargs...)
     checkparams(net, x)
-    H = Hessian(x)
-    hessian!(H, net, x; kwargs...) ./ size(net.input, 2)
+    H = only_flat ? zeros(eltype(x), length(x), length(x)) : Hessian(x)
+    hessian!(H, net, x; kwargs...) ./ n_samples(net)
 end
 """
     hessian_spectrum(net, x)
@@ -1239,7 +1254,7 @@ function (g::Grad)(dx, x; nx = weightnorm(x), forward = true, kwargs...)
     if o.show_progress
         if time() - o.t0 > o.progress_interval
             o.t0 = time()
-            @printf "%s: evals: (ℓ: %6i, ∇: %6i, ∇²: %6i), loss: %g\n" now() o.fk o.gk o.hk o.bestl
+            @printf "%s: evals: (ℓ: %6i, ∇: %6i, ∇²: %6i), loss: %g\n" now() o.fk o.gk o.hk o.bestl / n_samples(o.net)
         end
     end
     scale!(dx, g.l.o.tauinv)
@@ -1333,6 +1348,8 @@ Keyword arguments:
 """
 layer_spec(net::Net) = net.layerspec
 layer_spec(net::NetI) = net.student.layerspec
+layers(net::Net) = net.layers
+layers(net::NetI) = net.student.layers
 weights(net::Net) = net.weights
 weights(::NetI) = nothing
 function train(net, p;
@@ -1396,7 +1413,6 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                n_samples_trajectory = 100,
                include = nothing,
                exclude = String[],
-               transpose_solution = false, # obsolete
                dt = nothing,
                optim_options = Optim.Options(iterations = maxiterations_optim,
                                                time_limit = maxtime_optim,
@@ -1404,7 +1420,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                                                f_reltol = -eps(),
                                                x_abstol = -eps(),
                                                x_reltol = -eps(),
-                                               allow_f_increases = true,
+                                               allow_f_increases = false,
                                                g_abstol = g_tol,
                                                g_reltol = g_tol,
                                                callback = _ -> converged(fgh!.h.g.l.o)
@@ -1459,7 +1475,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
 #                                   minloss = minloss,
                                   losstype)
             sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
-                                callback = termin,
+                                callback = termin, maxiters = maxiterations_ode,
                                 (dt === nothing ? NamedTuple() : (;dt=dt))...)
             ode_stopped_by = termin.condition.stopped_by
             if sol.t[end] == 0
@@ -1499,7 +1515,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
     end
     optim_stopped_by = nothing
     if maxiterations_optim > 0
-        if !isnothing(g!.l.o.tauinv)
+        if !isnothing(g!.l.o.tauinv) && !isa(g!.l.o.tauinv, Number)
             @warn "Setting tauinv to 1. Consider setting `maxiterations_optim = 0`, if you do not want to use second order optimization."
             g!.l.o.tauinv .= 1
         end
@@ -1555,7 +1571,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                 "converged"
             elseif isa(res.ls_success, Bool) && !res.ls_success
                 "line search failed"
-            elseif Optim.f_increased(res) && !iteration_limit_reached(res)
+            elseif Optim.f_increased(res) && !Optim.iteration_limit_reached(res)
                 "objective increased between iterations"
             else
                 "unkown reason"
@@ -1582,7 +1598,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
               converged = converged(g!.l.o),
               optim_stopped_by, ode_stopped_by,
               total_time = time() - tstart, weights = g!.l.o.weights,
-              optim_iterations, trajectory, lossfunc, transpose_solution)
+              optim_iterations, trajectory, lossfunc)
     if result == :raw
         rawres
     else
@@ -1629,15 +1645,14 @@ function subsample(x, n)
         x
     end
 end
-transpose_solution(res, x) = res.transpose_solution ? transpose_params(x) : x
 _extract(::Val{:loss}, res) = res.loss
 _extract(::Val{:weights}, res) = res.weights
 _extract(::Val{:ode_loss}, res) = res.ode_loss
 _extract(::Val{:gnorm}, res) = res.gnorm
 _extract(::Val{:gnorm_regularized}, res) = res.gnorm_regularized
-_extract(::Val{:init}, res) = params2dict(transpose_solution(res, res.init))
-_extract(::Val{:x}, res) = params2dict(transpose_solution(res, res.x))
-_extract(::Val{:ode_x}, res) = isnothing(res.ode_x) ? nothing : params2dict(transpose_solution(res, res.ode_x))
+_extract(::Val{:init}, res) = params2dict(res.init)
+_extract(::Val{:x}, res) = params2dict(res.x)
+_extract(::Val{:ode_x}, res) = isnothing(res.ode_x) ? nothing : params2dict(res.ode_x)
 _extract(::Val{:ode_time_run}, res) = res.ode_time_run
 _extract(::Val{:converged}, res) = res.converged
 _extract(::Val{:total_time}, res) = res.total_time
@@ -1650,7 +1665,7 @@ _extract(::Val{:teacher}, res) = hasproperty(res, :teacher) ? res.teacher.p : no
 _extract(::Val{:layerspec}, res) = _layerextract(res.net)
 _layerextract(net::Net) = map(x -> (x[1], string(x[2]), x[3]), net.layerspec)
 _layerextract(net::NetI) = map(x -> (x[1], string(x[2]), x[3]), net.student.layerspec)
-_extract(::Val{:trajectory}, res) = isnothing(res.trajectory) ? nothing : OrderedDict(t => params2dict(transpose_solution(res, u)) for (t, u) in res.trajectory)
+_extract(::Val{:trajectory}, res) = isnothing(res.trajectory) ? nothing : OrderedDict(t => params2dict(u) for (t, u) in res.trajectory)
 _extract(::Val{:loss_curve}, res) = isnothing(res.trajectory) ? nothing : [res.lossfunc(u) for (_, u) in res.trajectory]
 _extract(::Val{:optim_stopped_by}, res) = res.optim_stopped_by
 _extract(::Val{:ode_stopped_by}, res) = res.ode_stopped_by
@@ -1705,8 +1720,14 @@ function unpickle(filename)
 end
 
 input_dim(net::Net) = size(net.input, 1) - first(net.layers).bias
+"""
+    random_params(net)
+"""
 random_params(net::NetI; kwargs...) = random_params(net.student; kwargs...)
 random_params(net; kwargs...) = random_params(Random.GLOBAL_RNG, net; kwargs...)
+"""
+    random_params(rng, net; distr_fn = glorot_normal)
+"""
 function random_params(rng, net::Net; distr_fn = glorot_normal)
     glorot(rng, (input_dim(net),
                  Int.(getproperty.(net.layers, :k))...), eltype(net.input),

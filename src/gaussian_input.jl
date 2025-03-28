@@ -85,6 +85,205 @@ for (kind, func) in ((:ϕϕ, :(f1(h1) * f2(h2))),
          end)
 end
 
+#
+function ϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    BvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2))
+end
+function _∂r₁XϕϕBvN(d1, d2, r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    -r1 * b1/n1^3 * d1(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2)) +
+    (u*r2/(n1*n2) - u*r1^2*r2/(n1^3*n2)) * d2(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2))
+end
+function ∂r₁ϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    _∂r₁XϕϕBvN(∂hBvN, ∂rBvN, r1, b1, r2, b2, u, n1, n2)
+end
+function ∂b₁ϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    1/n1 * ∂hBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2))
+end
+function ∂uϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    r1 * r2/ (n1 * n2) * ∂rBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2))
+end
+function ∂r₁∂r₁ϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    (-b1/n1^3 + 3*r1^2*b1/n1^5) * ∂hBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2)) -
+    r1 * b1/n1^3 * _∂r₁XϕϕBvN(∂h∂hBvN, ∂h∂rBvN, r1, b1, r2, b2, u, n1, n2) -
+    (3 * r1* r2 * u)/(n2 * n1^5) * ∂rBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2)) +
+    (u*r2/(n1*n2) - u*r1^2*r2/(n1^3*n2)) * _∂r₁XϕϕBvN(∂h∂rBvN, ∂r∂rBvN, r1, b1, r2, b2, u, n1, n2)
+end
+function ∂r₁∂r₂ϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    -r1 * b1/n1^3 * ∂hBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2)) +
+    (u*r2/(n1*n2) - u*r1^2*r2/(n1^3*n2)) * ∂rBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2))
+end
+function ∂r₁∂b₁ϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    -r1 /n1^3 * ∂hBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2)) + 1/n1 * (
+    -r1 * b1/n1^3 * ∂h∂hBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2)) +
+    (u*r2/(n1*n2) - u*r1^2*r2/(n1^3*n2)) * ∂r∂hBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2)))
+end
+function ∂r₂∂b₁ϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    1/n1 * (
+    -r2 * b2/n2^3 * ∂k∂hBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2)) +
+    (u*r1/(n1*n2) - u*r2^2*r1/(n2^3*n1)) * ∂r∂hBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2)))
+end
+function ∂r₁∂uϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    (r2/ (n1 * n2) - r1^2 * r2/ (n1^3 * n2))  * ∂rBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2)) + r1 * r2/ (n1 * n2) * (-r1 * b1/n1^3) * ∂h∂rBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2)) + r1 * r2/ (n1 * n2) * (u*r2/(n1*n2) - u*r1^2*r2/(n1^3*n2)) * ∂r∂rBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2))
+end
+function ∂u∂uϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    (r1 * r2/ (n1 * n2))^2 * ∂r∂rBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2))
+end
+function ∂b₁∂b₁ϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    1/n1^2 * ∂h∂hBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2))
+end
+function ∂b₁∂b₂ϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    1/(n1 * n2) * ∂h∂kBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2))
+end
+function ∂b₁∂uϕϕBvN(r1, b1, r2, b2, u, n1 = sqrt(1 + r1^2), n2 = sqrt(1 + r2^2))
+    1/n1 * r1 * r2/ (n1 * n2) * ∂r∂hBvN(b1/n1, b2/n2, u * r1 * r2/ (n1 * n2))
+end
+
+# 1-point (not performance critical)
+function integrate(::ϕϕ, w, _x, f1::typeof(normal_cdf), r, b)
+    n = sqrt(1 + r^2)
+    normal_cdf(b/n) - 2*owent(b/n, 1/sqrt(1 + 2r^2))
+end
+function integrate(::ϕ, w, _x, f1::typeof(normal_cdf), r, b)
+    normal_cdf(b/sqrt(1 + r^2))
+end
+function integrate(::∂rϕ, w, _x, f1::typeof(normal_cdf), r, b)
+    n = sqrt(1 + r^2)
+    -b*r/n^3 * normal_pdf(b/n)
+end
+function integrate(::∂bϕ, w, _x, f1::typeof(normal_cdf), r, b)
+    normal_pdf(b/sqrt(1 + r^2))/sqrt(1 + r^2)
+end
+
+# 2-point (performance critical)
+function integrate(::ϕϕ, w, _x, f1::typeof(normal_cdf), r1, b1,
+                                f2::typeof(normal_cdf), r2, b2,
+                                u, u′ = nothing)
+    ϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂r₁ϕϕ, w, _x, f1::typeof(normal_cdf), r1, b1,
+                                   f2::typeof(normal_cdf), r2, b2,
+                                   u, u′ = nothing)
+    ∂r₁ϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂b₁ϕϕ, w, _x, f1::typeof(normal_cdf), r1, b1,
+                                   f2::typeof(normal_cdf), r2, b2,
+                                   u, u′ = nothing)
+    ∂b₁ϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂uϕϕ, w, _x, f1::typeof(normal_cdf), r1, b1,
+                                  f2::typeof(normal_cdf), r2, b2,
+                                  u, u′ = nothing)
+    ∂uϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂r₁∂b₁ϕϕ, w, _x, f1::typeof(normal_cdf), r1, b1,
+                                   f2::typeof(normal_cdf), r2, b2,
+                                   u, u′ = nothing)
+    ∂r₁∂b₁ϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂r₁∂r₁ϕϕ, w, _x, f1::typeof(normal_cdf), r1, b1,
+                                   f2::typeof(normal_cdf), r2, b2,
+                                   u, u′ = nothing)
+    ∂r₁∂r₁ϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂r₂∂b₁ϕϕ, w, _x, f1::typeof(normal_cdf), r1, b1,
+                                   f2::typeof(normal_cdf), r2, b2,
+                                   u, u′ = nothing)
+    ∂r₂∂b₁ϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂r₁∂uϕϕ, w, _x, f1::typeof(normal_cdf), r1, b1,
+                                   f2::typeof(normal_cdf), r2, b2,
+                                   u, u′ = nothing)
+    ∂r₁∂uϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂u∂uϕϕ, w, _x, f1::typeof(normal_cdf), r1, b1,
+                                  f2::typeof(normal_cdf), r2, b2,
+                                  u, u′ = nothing)
+    ∂u∂uϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂b₁∂b₁ϕϕ, w, _x, f1::typeof(normal_cdf), r1, b1,
+                                  f2::typeof(normal_cdf), r2, b2,
+                                  u, u′ = nothing)
+    ∂b₁∂b₁ϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂b₁∂b₂ϕϕ, w, _x, f1::typeof(normal_cdf), r1, b1,
+                                  f2::typeof(normal_cdf), r2, b2,
+                                  u, u′ = nothing)
+    ∂b₁∂b₂ϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂b₁∂uϕϕ, w, _x, f1::typeof(normal_cdf), r1, b1,
+                                  f2::typeof(normal_cdf), r2, b2,
+                                  u, u′ = nothing)
+    ∂b₁∂uϕϕBvN(r1, b1, r2, b2, u)
+end
+
+function integrate(::ϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
+                                f2::typeof(sigmoid2), r2, b2,
+                                u, u′ = nothing)
+    n1 = sqrt(1 + r1^2)
+    n2 = sqrt(1 + r2^2)
+    4*ϕϕBvN(r1, b1, r2, b2, u, n1, n2) - 2*(normal_cdf(b1/n1) + normal_cdf(b2/n2)) + 1
+end
+function integrate(::∂r₁ϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
+                                   f2::typeof(sigmoid2), r2, b2,
+                                   u, u′ = nothing)
+    n1 = sqrt(1 + r1^2)
+    4*∂r₁ϕϕBvN(r1, b1, r2, b2, u, n1) + 2*r1 * b1/n1^3 * normal_pdf(b1/n1)
+end
+function integrate(::∂b₁ϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
+                                   f2::typeof(sigmoid2), r2, b2,
+                                   u, u′ = nothing)
+    n1 = sqrt(1 + r1^2)
+    4 * ∂b₁ϕϕBvN(r1, b1, r2, b2, u, n1) - 2/n1 * normal_pdf(b1/n1)
+end
+function integrate(::∂uϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
+                                  f2::typeof(sigmoid2), r2, b2,
+                                  u, u′ = nothing)
+    4 * ∂uϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂r₁∂uϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
+                                   f2::typeof(sigmoid2), r2, b2,
+                                   u, u′ = nothing)
+    4 * ∂r₁∂uϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂u∂uϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
+                                  f2::typeof(sigmoid2), r2, b2,
+                                  u, u′ = nothing)
+    4 * ∂u∂uϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂b₁∂uϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
+                                  f2::typeof(sigmoid2), r2, b2,
+                                  u, u′ = nothing)
+    4 * ∂b₁∂uϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂b₁∂b₁ϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
+                                  f2::typeof(sigmoid2), r2, b2,
+                                  u, u′ = nothing)
+    n1 = sqrt(1 + r1^2)
+    4 * ∂b₁∂b₁ϕϕBvN(r1, b1, r2, b2, u, n1) + 2 * b1/n1^3 * normal_pdf(b1/n1)
+end
+function integrate(::∂b₁∂b₂ϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
+                                  f2::typeof(sigmoid2), r2, b2,
+                                  u, u′ = nothing)
+    4 * ∂b₁∂b₂ϕϕBvN(r1, b1, r2, b2, u)
+end
+function integrate(::∂r₁∂b₁ϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
+                                   f2::typeof(sigmoid2), r2, b2,
+                                   u, u′ = nothing)
+    n1 = sqrt(1 + r1^2)
+    4 * ∂r₁∂b₁ϕϕBvN(r1, b1, r2, b2, u) + 2*r1/n1^3 * (1 - b1^2/n1^2) * normal_pdf(b1/n1)
+end
+function integrate(::∂r₁∂r₁ϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
+                                   f2::typeof(sigmoid2), r2, b2,
+                                   u, u′ = nothing)
+    n1 = sqrt(1 + r1^2)
+    4 * ∂r₁∂r₁ϕϕBvN(r1, b1, r2, b2, u) + ((2*b1 - 4*b1*r1^2)/n1^5 + 2*r1^2*b1^3/n1^7) * normal_pdf(b1/n1)
+end
+function integrate(::∂r₂∂b₁ϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
+                                   f2::typeof(sigmoid2), r2, b2,
+                                   u, u′ = nothing)
+    4*∂r₂∂b₁ϕϕBvN(r1, b1, r2, b2, u)
+end
+
 struct NetI{T,TE,S,G1,G2,TB1,TB2,TBT1,TBT2}
     teacher::TE
     student::S
@@ -134,7 +333,7 @@ _weights_and_biases(w, is_bias) = w[:, 1:end-is_bias], is_bias ? w[:, end] : not
 _weights_and_biases!(w, ::Nothing, p) = copyto!(w, p), nothing
 _bias(::Nothing, i) = 0
 _bias(b, i) = b[i]
-_similarity(x, y, i, j, rx, ry) = sum(x[i, k]*y[j, k] for k in axes(x, 2))/(rx*ry)
+_similarity(x, y, i, j, rx, ry) = clamp(sum(x[i, k]*y[j, k] for k in axes(x, 2))/(rx*ry), -1, 1)
 function _weights_and_biases!(w, b, p)
     n = length(w)
     copyto!(w, 1, p, 1, n),
@@ -193,7 +392,6 @@ function NetI(teacher, student; T = eltype(student.input),
           zeros(T, k, 5),
           loss_correction_t2)
 end
-hessian(net::NetI, x; kwargs...) = _hessian!(zeros(length(x), length(x)), net, x; kwargs...)
 function _hessian!(H, net::NetI{T}, x; backprop = true, forward = true, second_order = true, weights = nothing, losstype = MSE(), derivs = nothing) where T
     (; g1, g2, w1, b1, w2, b2, rw1, rwt, w1t, b1t, w2t, b2t, g0, gr, gs, u, v, dg0, dgr, dgru, dgrv) = net
     forward && _loss(net, x)
@@ -246,17 +444,17 @@ function _hessian!(H, net::NetI{T}, x; backprop = true, forward = true, second_o
         i1, i2 = _ind(i, Din)
         j1, j2 = _ind(j, Din)
         if i1 == j1
-            tmp = 1/2*w2[i1]^2*(dgr[i1, 3]*_drw2(w1, rw1, i1, i2)*_drw2(w1, rw1, j1, j2) -
+            tmp = 1/2*w2[i1]^2*(dgr[i1, 3]*∂rᵢ_∂wᵢⱼ(w1, rw1, i1, i2)*∂rᵢ_∂wᵢⱼ(w1, rw1, j1, j2) -
                                 dgr[i1, 1]*w1[i1, i2]*w1[j1, j2]/rw1[i1]^3)
             if i2 == j2
                 tmp += 1/2*w2[i1]^2*dgr[i1, 1]/rw1[i1]
             end
             for k in eachindex(w2)
                 k == j1 && continue
-                tmp += w2[k]*w2[j1]*_dc2(w1, rw1, w1, rw1, v, dgrv, i1, k, i2, j1, j2)
+                tmp += w2[k]*w2[j1]*_c2(w1, rw1, w1, rw1, v, dgrv, i1, k, i2, j1, j2)
             end
             for k in eachindex(w2t)
-                tmp -= w2t[k]*w2[j1]*_dc2(w1, rw1, w1t, rwt, u, dgru, i1, k, i2, j1, j2)
+                tmp -= w2t[k]*w2[j1]*_c2(w1, rw1, w1t, rwt, u, dgru, i1, k, i2, j1, j2)
             end
             if delta_b ≠ 0
                 tmp += delta_b * w2[i1] * w1[i1, i2] * w1[j1, j2]/rw1[i1]^2 * (-dg0[i1, 1]/rw1[i1] + dg0[i1, 3])
@@ -265,7 +463,7 @@ function _hessian!(H, net::NetI{T}, x; backprop = true, forward = true, second_o
                 end
             end
         else
-            tmp = w2[i1]*w2[j1]*_dc2(w1, rw1, w1, rw1, v, dgrv, i1, j1, i2, j1, j2)
+            tmp = w2[i1]*w2[j1]*_c2(w1, rw1, w1, rw1, v, dgrv, i1, j1, i2, j1, j2)
         end
         _i = (i2-1)*K+i1
         _j = (j2-1)*K+j1
@@ -325,21 +523,21 @@ function _hessian!(H, net::NetI{T}, x; backprop = true, forward = true, second_o
             end
             for j in eachindex(w1)
                 j1, j2 = _ind(j, Din)
-                drdw = _drw2(w1, rw1, j1, j2)
+                drdw = ∂rᵢ_∂wᵢⱼ(w1, rw1, j1, j2)
                 if i == j1
-                    tmp = w2[i]^2/2 * _drw2(w1, rw1, i, j2) * dgr[i, 5] + delta_b * w2[i] * drdw * dg0[i, 5]
+                    tmp = w2[i]^2/2 * ∂rᵢ_∂wᵢⱼ(w1, rw1, i, j2) * dgr[i, 5] + delta_b * w2[i] * drdw * dg0[i, 5]
                     for k in eachindex(w2t)
                         tmp -= w2[i] * w2t[k] * (drdw * dgru[i, k, 10] +
-                                                 _dvw2(w1, rw1, w1t, rwt, u, i, j2, k) * dgru[i, k, 11])
+                                                 ∂uᵢₖ_∂wᵢⱼ(w1, rw1, w1t, rwt, u, i, j2, k) * dgru[i, k, 11])
                     end
                     for k in eachindex(w2)
                         k == i && continue
                         tmp += w2[i] * w2[k] * (drdw * dgrv[i, k, 11] +
-                                                _dvw2(w1, rw1, w1, rw1, v, i, j2, k) * dgrv[i, k, 13])
+                                                ∂uᵢₖ_∂wᵢⱼ(w1, rw1, w1, rw1, v, i, j2, k) * dgrv[i, k, 13])
                     end
                 else
                     tmp = w2[i] * w2[j1] * (drdw * dgrv[i, j1, 12] +
-                                            _dvw2(w1, rw1, w1, rw1, v, j1, j2, i) * dgrv[i, j1, 13])
+                                            ∂uᵢₖ_∂wᵢⱼ(w1, rw1, w1, rw1, v, j1, j2, i) * dgrv[i, j1, 13])
                 end
                 _j = (j2-1)*K+j1
                 H[N0 + i, _j] = H[_j, N0 + i] = tmp
@@ -361,7 +559,6 @@ function backward!(net::NetI, x; forward = true)
     dgdrub!(dgru, g2, f, rw1, b1, ft, rwt, b1t, u)
     dgdrvb!(dgrv, g2, f, rw1, b1, v)
 end
-gradient(net::NetI, x; kwargs...) = _gradient!(zero(x), net, x; kwargs...)
 function _gradient!(dx, net::NetI, x; backward = true, forward = true, weights = nothing, derivs = nothing, losstype = MSE())
     (; w1, b1, w2, b2, w1t, w2t, b2t, rw1, rwt, gr, gt, gs, dg0, dgr, dgru, dgrv, u, v) = net
     forward && _loss(net, x)
@@ -407,7 +604,7 @@ function _gradient!(dx, net::NetI, x; backward = true, forward = true, weights =
     end
     dx
 end
-loss(net::NetI, x; kwargs...) = __loss(net, x; kwargs...)
+loss(net::NetI, x; kwargs...) = _loss(net, x; kwargs...)
 function __loss(net::NetI, x; forward = true, weights = nothing, losstype = MSE(), derivs = nothing)
     (; w1, b1, w2, b2, w1t, b1t, w2t, b2t, rw1, rwt, gr, gt, gs, g0, u, v) = net
     f = net.student.layerspec[1][2]
@@ -449,60 +646,6 @@ function __loss(net::NetI, x; forward = true, weights = nothing, losstype = MSE(
         net.s[] = s
     end
     res + net.loss_correction_t2 + delta_b^2 + 2 * delta_b * (net.s[] - net.loss_correction_t1)
-end
-
-g3(::Val{relu}, r) = r^2/2
-g3(::Val{sigmoid2}, r) = 2/pi*asin(r^2/(1 + r^2))
-g3(::Val{cube}, r) = 15r^6
-function g3(::Val{relu}, r1, r2, u)
-    if isapprox(u, 1, atol = 1e-5)
-        r1*r2/2
-    elseif isapprox(u, -1, atol = 1e-5)
-        0.
-    else
-        max(0., r1*r2/(2π)*(sqrt(1-u^2)+(π - acos(u))*u))
-    end
-end
-g3(::Val{sigmoid2}, r1, r2, u) = 2/pi*asin(r1*r2*u/(sqrt(1 + r1^2)*sqrt(1 + r2^2)))
-g3(::Val{cube}, r1, r2, u) = r1^3 * r2^3 * (6u^3 + 9u)
-dgdr(::Val{relu}, r) = r
-dgdr(::Val{sigmoid2}, r) = (4*r)/(sqrt(2*r^2 + 1)*(π*r^2 + π))
-dgdr(::Val{cube}, r) = 90*r^5
-d2gdr(::Val{relu}, r) = 1
-d2gdr(::Val{sigmoid2}, r) = -(4*(4*r^4 + r^2 - 1))/(π*(r^2 + 1)^2*(2*r^2 + 1)^(3/2))
-d2gdr(::Val{cube}, r) = 450*r^4
-function dgdru(::Val{relu}, r1, r2, u)
-    r2/(2π)*(sqrt(1-u^2)+(π - acos(u))*u),
-    r1*r2/(2π) * (π - acos(u))
-end
-function dgdru(::Val{sigmoid2}, r1, r2, u)
-    (2*r2*u)/(π*(r1^2 + 1)*sqrt(r1^2*(1 - r2^2*(u^2 - 1)) + r2^2 + 1)),
-    (2*r1*r2)/(π*sqrt(r1^2*(1 - r2^2*(u^2 - 1)) + r2^2 + 1))
-end
-function dgdru(::Val{cube}, r1, r2, u)
-    3*r1^2*r2^3*(6u^3+9u),
-    r1^3*r2^3*(18*u^2+9)
-end
-function d2gdru(::Val{relu}, r1, r2, u)
-    0, # 11
-    1/(2π)*(sqrt(1-u^2)+(π - acos(u))*u), # 12
-    r2/(2π) * (π - acos(u)), # 13
-    r1/(2π) * (π - acos(u)), # 23
-    r1*r2/(2π*sqrt(1 - u^2)) # 33
-end
-function d2gdru(::Val{sigmoid2}, r1, r2, u)
-    -(6*r1*(r1^2 + 1)*(r2^3 + r2)*u - 2*r1*(3*r1^2 + 1)*r2^3*u^3)/(π*(r1^2 + 1)^2*(r1^2 *(1 - r2^2*(u^2 - 1)) + r2^2 + 1)^(3/2)),
-    (2*u)/(π*(r1^2*(1 - r2^2*(u^2 - 1)) + r2^2 + 1)^(3/2)),
-    (2*r2*(r2^2 + 1))/(π*(r1^2*(-(r2^2*(u^2 - 1) - 1)) + r2^2 + 1)^(3/2)),
-    (2*r1*(r1^2 + 1))/(π*(r2^2*(-(r1^2*(u^2 - 1) - 1)) + r1^2 + 1)^(3/2)),
-    (2*r1^3*r2^3*u)/(π*(r1^2*(-(r2^2*(u^2 - 1) - 1)) + r2^2 + 1)^(3/2))
-end
-function d2gdru(::Val{cube}, r1, r2, u)
-    6r1*r2^3*(6u^3+9u),
-    9*r1^2*r2^2*(6u^3+9u),
-    3*r1^2*r2^3*(18u^2+9),
-    3*r1^3*r2^2*(18u^2+9),
-    r1^3*r2^3*36u
 end
 
 
@@ -608,14 +751,23 @@ end
         end
     end
 end
+
+# helpers
+
 _ind(i, D) = (((i-1)÷D)+1, (i-1)%D+1)
-function _dc2(w1, r1, w2, r2, u, dgru, k, j, l, m, n)
+∂rᵢ_∂wᵢⱼ(w, r, i, j) = w[i, j]/r[i]
+∂uᵢₖ_∂wᵢⱼ(wi, ri, wj, rj, u, i, j, k) = (wj[k, j]/(ri[i]*rj[k]) - wi[i, j]*u[i, k]/ri[i]^2)
+function _c(wi, ri, wj, rj, u, dgru, i, j, k)
+    dgru[i, k, 1] * ∂rᵢ_∂wᵢⱼ(wi, ri, i, j) +
+    dgru[i, k, 2] * ∂uᵢₖ_∂wᵢⱼ(wi, ri, wj, rj, u, i, j, k)
+end
+function _c2(w1, r1, w2, r2, u, dgru, k, j, l, m, n)
     tmp = 0.
     if k == m
-        ∂rₖₗ = _drw2(w1, r1, k, l)
-        ∂vₖⱼwₖₗ = _dvw2(w1, r1, w2, r2, u, k, l, j)
-        ∂vₖⱼwₘₙ = _dvw2(w1, r1, w2, r2, u, k, n, j)
-        ∂rₘₙ = _drw2(w1, r1, m, n)
+        ∂rₖₗ = ∂rᵢ_∂wᵢⱼ(w1, r1, k, l)
+        ∂vₖⱼwₖₗ = ∂uᵢₖ_∂wᵢⱼ(w1, r1, w2, r2, u, k, l, j)
+        ∂vₖⱼwₘₙ = ∂uᵢₖ_∂wᵢⱼ(w1, r1, w2, r2, u, k, n, j)
+        ∂rₘₙ = ∂rᵢ_∂wᵢⱼ(w1, r1, m, n)
         tmp += (dgru[k, j, 4] * ∂rₘₙ + dgru[k, j, 6] * ∂vₖⱼwₘₙ) * ∂rₖₗ
         tmp -= dgru[k, j, 1] * w1[k, l]*w1[m, n]/r1[k]^3
         tmp += (dgru[k, j, 6] * ∂rₘₙ  + dgru[k, j, 8] * ∂vₖⱼwₘₙ) * ∂vₖⱼwₖₗ
@@ -627,10 +779,10 @@ function _dc2(w1, r1, w2, r2, u, dgru, k, j, l, m, n)
             tmp += dgru[k, j, 1]/r1[k]
         end
     elseif j == m
-        ∂rₖₗ = _drw2(w1, r1, k, l)
+        ∂rₖₗ = ∂rᵢ_∂wᵢⱼ(w1, r1, k, l)
         ∂vₖⱼwₘₙ = (w1[k, n]/(r1[k]*r1[m]) - w1[m, n]*u[k, m]/r1[m]^2)
-        ∂vₖⱼwₖₗ = _dvw2(w1, r1, w2, r2, u, k, l, j)
-        ∂rₘₙ = _drw2(w1, r1, m, n)
+        ∂vₖⱼwₖₗ = ∂uᵢₖ_∂wᵢⱼ(w1, r1, w2, r2, u, k, l, j)
+        ∂rₘₙ = ∂rᵢ_∂wᵢⱼ(w1, r1, m, n)
         tmp += (dgru[k, j, 5] * ∂rₘₙ + dgru[k, j, 6] * ∂vₖⱼwₘₙ) * ∂rₖₗ
         tmp += (dgru[k, j, 7] * ∂rₘₙ + dgru[k, j, 8] * ∂vₖⱼwₘₙ) * ∂vₖⱼwₖₗ
         tmp += dgru[k, j, 2] * (-w1[m, l]/(r1[k]*r1[m]^2)*∂rₘₙ-w1[k, l]/r1[k]^2*∂vₖⱼwₘₙ)
@@ -639,16 +791,4 @@ function _dc2(w1, r1, w2, r2, u, dgru, k, j, l, m, n)
         end
     end
     tmp
-end
-"""
-∂rᵢ/∂wᵢⱼ
-"""
-_drw2(w, r, i, j) = w[i, j]/r[i]
-"""
-∂uᵢₖ/∂wᵢⱼ
-"""
-_dvw2(wi, ri, wj, rj, u, i, j, k) = (wj[k, j]/(ri[i]*rj[k]) - wi[i, j]*u[i, k]/ri[i]^2)
-function _c(wi, ri, wj, rj, u, dgru, i, j, k)
-    dgru[i, k, 1] * _drw2(wi, ri, i, j) +
-    dgru[i, k, 2] * _dvw2(wi, ri, wj, rj, u, i, j, k)
 end
