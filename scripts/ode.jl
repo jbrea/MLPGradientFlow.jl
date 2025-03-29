@@ -1,16 +1,17 @@
 include(joinpath(@__DIR__, "helper.jl"))
 using Sundials
 
+trajectory_distance(res1::Dict, res2::Dict) = trajectory_distance(res1["trajectory"], res2["trajectory"])
 function trajectory_distance(traj, ref)
-    xtraj = params.(collect(values(traj)))
-    xref = collect(values(ref))
+    xtraj = MLPGradientFlow.params.(collect(values(traj)))
+    xref = MLPGradientFlow.params.(collect(values(ref)))
     dists = Float64[]
     idxs = Int[]
     i0 = 1
     for x in xtraj
         d = Inf
         for j in i0:length(xref)
-            dj = sum(abs2, params(xref[j]) - x)
+            dj = MLPGradientFlow.weightnorm(xref[j] - x)
             if dj ≤ d
                 d = dj
                 i0 = j

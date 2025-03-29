@@ -29,12 +29,14 @@ end
 
 function minloss(net, θ, v1, v2, a1, a2)
     N = length(v1)
-    u, = svd([v1 v2 zeros(N, N - 2)])
-    v = θ + a1*v1 + a2*v2
+    _v1 = 2*normalize(v1)
+    _v2 = normalize(v2)
+    u, = svd([_v1 _v2 zeros(N, N - 2)])
+    v = θ + a1*_v1/2 + a2*_v2
     b = u[:, 3:end]
     _grad(G, u) = G .= b' * gradient(net, b * u + v)
     _loss(u) = loss(net, b * u + v)
     sol = Optim.optimize(_loss, _grad, zeros(N-2), LBFGS())
-    u = Optim.minimizer(sol)
-    (; loss = _loss(u), p = b * u + v, u, delta_loss = _loss(zeros(N-2)) - _loss(u), sol)
+    x = Optim.minimizer(sol)
+    (; loss = _loss(x), p = b * x + v, x, delta_loss = _loss(zeros(N-2)) - _loss(x), to_local_coords = p -> u[:, 1:2]' * (θ - p))
 end

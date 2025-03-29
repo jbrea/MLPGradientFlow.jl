@@ -2,7 +2,7 @@ module MLPGradientFlow
 
 using ComponentArrays, LoopVectorization, OrdinaryDiffEq, ArrayInterface, Static,
       Optim, IfElse, LinearAlgebra, Distributed, Dates, Printf, Pkg,
-      OrderedCollections, SLEEFPirates, Random, SpecialFunctions, Pickle, StrideArraysCore
+      OrderedCollections, SLEEFPirates, Random, SpecialFunctions, Pickle, StrideArraysCore, Optimisers
 using FastGaussQuadrature
 using NLopt, Sundials
 
@@ -1043,44 +1043,6 @@ Compute the spectrum of the hessian of `net` at `x`.
 hessian_spectrum(net, x) = eigen(Symmetric(hessian(net, x)))
 
 ###
-### Optimizers
-###
-### Copied and adapted from https://github.com/FluxML/Flux.jl/blob/ba48ad082a257fef9067c006cfc3f52d61e6da70/src/optimise/optimisers.jl#L167
-abstract type AbstractOptimiser end
-mutable struct Adam <: AbstractOptimiser
-    eta::Float64
-    beta::Tuple{Float64,Float64}
-    epsilon::Float64
-    state::IdDict{Any, Any}
-end
-Adam(η::Real = 0.001, β::Tuple = (0.9, 0.999), ϵ::Real = 1e-8) = Adam(η, β, ϵ, IdDict())
-Adam(η::Real, β::Tuple, state::IdDict) = Adam(η, β, 1e-8, state)
-
-function apply!(o::Adam, x, Δ)
-    η, β = o.eta, o.beta
-
-    mt, vt, βp = get!(o.state, x) do
-      (zero(x), zero(x), Float64[β[1], β[2]])
-    end :: Tuple{typeof(x),typeof(x),Vector{Float64}}
-
-    @. mt = β[1] * mt + (1 - β[1]) * Δ
-    @. vt = β[2] * vt + (1 - β[2]) * Δ * conj(Δ)
-    @. Δ =  mt / (1 - βp[1]) / (√(vt / (1 - βp[2])) + o.epsilon) * η
-    βp .= βp .* β
-
-    return Δ
-end
-mutable struct Descent <: AbstractOptimiser
-    eta::Float64
-end
-
-Descent() = Descent(1e-3)
-
-function apply!(o::Descent, x, Δ)
-    Δ .*= o.eta
-end
-
-###
 ### Batch
 ###
 struct FullBatch end
@@ -1254,7 +1216,7 @@ function (g::Grad)(dx, x; nx = weightnorm(x), forward = true, kwargs...)
     if o.show_progress
         if time() - o.t0 > o.progress_interval
             o.t0 = time()
-            @printf "%s: evals: (ℓ: %6i, ∇: %6i, ∇²: %6i), loss: %g\n" now() o.fk o.gk o.hk o.bestl / n_samples(o.net)
+            @printf "%s: evals: (ℓ: %6i, ∇: %6i, ∇²: %6i), loss: %g\n" now() o.fk o.gk o.hk o.bestl / n_samples(o.net_eval)
         end
     end
     scale!(dx, g.l.o.tauinv)
@@ -1435,16 +1397,18 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
         if verbosity > 0
             @info "Starting ODE solver $alg."
         end
-        if isa(alg, AbstractOptimiser)
+        if isa(alg, Optimisers.AbstractRule)
             i = 1
             t0 = time()
             if save_everystep
                 trajectory = [(0, copy(x))]
             end
+            state = Optimisers.init(alg, x)
             while true
                 g!(G, x)
                 G .*= 1/n_samples(net) # scale with data
-                x .-= apply!(alg, x, G)
+                state, dx = Optimisers.apply!(alg, state, x, G)
+                x .-= dx
                 if save_everystep
                     push!(trajectory, (i, copy(x)))
                 end
