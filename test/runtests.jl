@@ -341,7 +341,7 @@ end
         target = teacher(input)
         teacher.net.target .= target
         student = Net(; layers = ((2, tanh_fast, b1), (1, identity, b2)), input, target)
-        infinite_student = gauss_hermite_net(student, teacher)
+        infinite_student = gauss_hermite_net(teacher, student)
         p = random_params(student)
         p .= randn(length(p))
         @test loss(student, p) ≈ loss(infinite_student, p) atol = 1e-1
