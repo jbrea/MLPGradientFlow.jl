@@ -45,7 +45,7 @@ SpecialFunctions = "2.5.0"
 Static = "0.7,0.8,1"
 StrideArraysCore = "0.3,0.4,0.5"
 VectorizationBase = "0.21.71"
-julia = "1.7"
+julia = "1.9"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

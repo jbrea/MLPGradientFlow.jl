@@ -6,7 +6,7 @@ using ComponentArrays, LoopVectorization, OrdinaryDiffEq, ArrayInterface, Static
 using FastGaussQuadrature
 using NLopt, Sundials
 
-export Net, NetI, TeacherNet, Adam, Descent, FullBatch, MiniBatch
+export Net, NetI, TeacherNet, FullBatch, MiniBatch
 export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict, gauss_hermite_net
 export sigmoid, softplus, g, gelu, square, relu, softmax, sigmoid2, cube, Poly, selu, silu, tanh_fast, normal_cdf
 export pickle, unpickle
@@ -1072,8 +1072,7 @@ start_of_epoch(b::MiniBatch) = b.start == 1
 ###
 
 needs_hessian(::Any) = true
-needs_hessian(::Descent) = false
-needs_hessian(::Adam) = false
+needs_hessian(::Optimisers.AbstractRule) = false
 needs_hessian(::BFGS) = false
 needs_hessian(::LBFGS) = false
 needs_hessian(::RK4) = false
