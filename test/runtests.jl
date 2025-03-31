@@ -268,7 +268,8 @@ end
 @testset "batch" begin
     import MLPGradientFlow: get_functions
     Random.seed!(12)
-    net = Net(layers = ((2, relu, true), (1, identity, false)), input = randn(2, 30), target = randn(1, 30))
+    input = randn(2, 30)
+    net = Net(; layers = ((2, relu, true), (1, identity, false)), input, target = randn(1, 30))
     funcs_fullbatch = get_functions(net, Inf);
     funcs_weighted = get_functions(net, Inf, weights = [zeros(10); ones(10); zeros(10)]);
     funcs_minibatch = get_functions(net, Inf, batchsize = 10);
@@ -288,6 +289,7 @@ end
     funcs_minibatch[2](dp_tmp, p) # third batch
     dp_minibatch .+= dp_tmp
     @test dp_fullbatch ≈ dp_minibatch
+    @test net.input[1:2, 1:end] == input # checks for ugly bug with StrideArray views
 end
 
 @testset "crossentropy" begin
@@ -341,7 +343,6 @@ end
         teacher = TeacherNet(; layers = ((2, softplus, true), (1, identity, true)), input)
         teacher.p .= randn(length(teacher.p))
         target = teacher(input)
-        teacher.net.target .= target
         student = Net(; layers = ((2, tanh_fast, b1), (1, identity, b2)), input, target)
         infinite_student = gauss_hermite_net(teacher, student)
         p = random_params(student)

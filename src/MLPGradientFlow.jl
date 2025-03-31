@@ -393,7 +393,7 @@ function Net(; layers, input = nothing, target = nothing,
                weights = nothing,
                bias_adapt_input = true, derivs = 2, copy_input = true, verbosity = 1,
                Din = isnothing(input) ? error("Provide input or Din") : size(input, 1) - last(first(layers))*(1-bias_adapt_input))
-    if !isnothing(input) && !isnothing(target) && !isa(eltype(target), Integer) && eltype(input) != eltype(target)
+    if !isnothing(input) && !isnothing(target) && !isa(eltype(target), Integer) && eltype(input) != eltype(target) && eltype(target) != Int
         @warn "`input` ($(eltype(input)) and `target` ($(eltype(target)) have not the same type."
     end
     if layers[end][2] ≠ softmax && !isnothing(layers[end][1]) && !isnothing(target) && size(target, 1) ≠ layers[end][1]
@@ -1199,8 +1199,8 @@ function OptimizationState(net; maxnorm = Inf, progress_interval = 5., net_eval 
         end
         batcher = MiniBatch(net.input, net.target, batchsize, 1)
         _net = Net(net,
-                   input = copy(net.input[:, 1:batchsize]),
-                   target = copy(net.target[:, 1:batchsize]),
+                   input = Array(net.input[:, 1:batchsize]),
+                   target = Array(net.target[:, 1:batchsize]),
                    bias_adapt_input = false)
     else
         batcher = FullBatch()
