@@ -265,6 +265,8 @@ end
     @test res["loss"] ≈ res_distr[i][1]["loss"] atol = 1e-5
 end
 
+GC.gc()
+
 @testset "batch" begin
     import MLPGradientFlow: get_functions
     Random.seed!(12)
