@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Separation of Timescales · MLPGradientFlow.jl</title><meta name="title" content="Separation of Timescales · MLPGradientFlow.jl"/><meta property="og:title" content="Separation of Timescales · MLPGradientFlow.jl"/><meta property="twitter:title" content="Separation of Timescales · MLPGradientFlow.jl"/><meta name="description" content="Documentation for MLPGradientFlow.jl."/><meta property="og:description" content="Documentation for MLPGradientFlow.jl."/><meta property="twitter:description" content="Documentation for MLPGradientFlow.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MLPGradientFlow.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Overview</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../train/">Training to convergence</a></li><li><a class="tocitem" href="../teacherstudent/">Teacher student setup</a></li><li><a class="tocitem" href="../sgd/">Comparison of Gradient Flow to SGD</a></li><li><a class="tocitem" href="../normal/">Standard Normal Input</a></li><li class="is-active"><a class="tocitem" href>Separation of Timescales</a></li></ul></li><li><a class="tocitem" href="../python/">Usage from Python</a></li><li><a class="tocitem" href="../activations/">Activation Functions</a></li><li><a class="tocitem" href="../docstrings/">Docstrings</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Separation of Timescales</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Separation of Timescales</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/jbrea/MLPGradientFlow.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/jbrea/MLPGradientFlow.jl/blob/main/docs/src/tauinv.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><p>To experiment with different timescales for different parameters, we can use separate <code>tauinv</code> for each parameter. In the following example the biases change on a much faster timescale than the weights.</p><pre><code class="language-julia hljs">using MLPGradientFlow, Random
+
+Random.seed!(14)
+
+input = randn(2, 5_000)
+teacher = TeacherNet(; layers = ((5, sigmoid2, true), (1, identity, true)),
+                       p = params((randn(5, 2), randn(5)), (randn(1, 5), randn(1))),
+                       input)
+
+student = Net(; layers = ((4, sigmoid2, true), (1, identity, true)),
+                input, target = teacher(input))
+
+p = random_params(student)
+
+neti = NetI(teacher, student)
+
+res_standard = train(neti, p; maxtime_ode = 10, maxiterations_optim = 0)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{String, Any} with 17 entries:
+  &quot;gnorm&quot;             =&gt; 4.3992e-15
+  &quot;init&quot;              =&gt; Dict(&quot;w1&quot;=&gt;[0.13725 1.29647 0.0; -0.644227 0.487307 0.…
+  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[-0.0933173 1.18814 0.226924; -0.425007 0.5…
+  &quot;loss_curve&quot;        =&gt; [1.12621, 0.00147223, 2.27038e-6, 2.27038e-6, 2.27038e…
+  &quot;optim_iterations&quot;  =&gt; 0
+  &quot;ode_stopped_by&quot;    =&gt; &quot;t &gt; 1e300&quot;
+  &quot;ode_iterations&quot;    =&gt; 2707
+  &quot;optim_time_run&quot;    =&gt; 0
+  &quot;converged&quot;         =&gt; false
+  &quot;ode_time_run&quot;      =&gt; 1.15833
+  &quot;loss&quot;              =&gt; 2.27038e-6
+  &quot;trajectory&quot;        =&gt; OrderedDict(0.0=&gt;Dict(&quot;w1&quot;=&gt;[0.13725 1.29647 0.0; -0.6…
+  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[-0.0933173 1.18814 0.226924; -0.425007 0.5…
+  &quot;total_time&quot;        =&gt; 7.61225
+  &quot;ode_loss&quot;          =&gt; 2.27038e-6
+  &quot;layerspec&quot;         =&gt; ((4, &quot;sigmoid2&quot;, true), (1, &quot;identity&quot;, true))
+  &quot;gnorm_regularized&quot; =&gt; 4.3992e-15</code></pre><pre><code class="language-julia hljs">tauinv = zero(p) .+ 1
+tauinv.w1[:, end] .= 1e-4
+tauinv.w2[:, end] .= 1e-4
+
+res = train(neti, p; tauinv, maxtime_ode = 20, maxiterations_optim = 0)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{String, Any} with 17 entries:
+  &quot;gnorm&quot;             =&gt; 7.39628e-9
+  &quot;init&quot;              =&gt; Dict(&quot;w1&quot;=&gt;[0.13725 1.29647 0.0; -0.644227 0.487307 0.…
+  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[-0.264197 1.17991 0.180489; 0.00295428 -0.…
+  &quot;loss_curve&quot;        =&gt; [1.12621, 1.11164, 1.10364, 1.09962, 1.09768, 1.09668,…
+  &quot;optim_iterations&quot;  =&gt; 0
+  &quot;ode_stopped_by&quot;    =&gt; &quot;maxtime_ode &gt; 20.0s&quot;
+  &quot;ode_iterations&quot;    =&gt; 53217
+  &quot;optim_time_run&quot;    =&gt; 0
+  &quot;converged&quot;         =&gt; false
+  &quot;ode_time_run&quot;      =&gt; 20.0001
+  &quot;loss&quot;              =&gt; 0.000334693
+  &quot;trajectory&quot;        =&gt; OrderedDict(0.0=&gt;Dict(&quot;w1&quot;=&gt;[0.13725 1.29647 0.0; -0.6…
+  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[-0.264197 1.17991 0.180489; 0.00295428 -0.…
+  &quot;total_time&quot;        =&gt; 23.0323
+  &quot;ode_loss&quot;          =&gt; 0.000334693
+  &quot;layerspec&quot;         =&gt; ((4, &quot;sigmoid2&quot;, true), (1, &quot;identity&quot;, true))
+  &quot;gnorm_regularized&quot; =&gt; 7.39628e-9</code></pre><p>We see that the two dynamics converge to different solutions.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../normal/">« Standard Normal Input</a><a class="docs-footer-nextpage" href="../python/">Usage from Python »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.10.0 on <span class="colophon-date" title="Monday 31 March 2025 19:45">Monday 31 March 2025</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

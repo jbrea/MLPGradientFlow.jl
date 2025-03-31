@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Usage from Python · MLPGradientFlow.jl</title><meta name="title" content="Usage from Python · MLPGradientFlow.jl"/><meta property="og:title" content="Usage from Python · MLPGradientFlow.jl"/><meta property="twitter:title" content="Usage from Python · MLPGradientFlow.jl"/><meta name="description" content="Documentation for MLPGradientFlow.jl."/><meta property="og:description" content="Documentation for MLPGradientFlow.jl."/><meta property="twitter:description" content="Documentation for MLPGradientFlow.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MLPGradientFlow.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Overview</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../train/">Training to convergence</a></li><li><a class="tocitem" href="../teacherstudent/">Teacher student setup</a></li><li><a class="tocitem" href="../sgd/">Comparison of Gradient Flow to SGD</a></li><li><a class="tocitem" href="../normal/">Standard Normal Input</a></li><li><a class="tocitem" href="../tauinv/">Separation of Timescales</a></li></ul></li><li class="is-active"><a class="tocitem" href>Usage from Python</a><ul class="internal"><li><a class="tocitem" href="#Installation"><span>Installation</span></a></li><li><a class="tocitem" href="#Examples"><span>Examples</span></a></li></ul></li><li><a class="tocitem" href="../activations/">Activation Functions</a></li><li><a class="tocitem" href="../docstrings/">Docstrings</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Usage from Python</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Usage from Python</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/jbrea/MLPGradientFlow.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/jbrea/MLPGradientFlow.jl/blob/main/docs/src/python.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Usage-from-Python"><a class="docs-heading-anchor" href="#Usage-from-Python">Usage from Python</a><a id="Usage-from-Python-1"></a><a class="docs-heading-anchor-permalink" href="#Usage-from-Python" title="Permalink"></a></h1><h2 id="Installation"><a class="docs-heading-anchor" href="#Installation">Installation</a><a id="Installation-1"></a><a class="docs-heading-anchor-permalink" href="#Installation" title="Permalink"></a></h2><p>Install <code>juliacall</code>, e.g. <code>pip install juliacall</code>.</p><pre><code class="language-python hljs">from juliacall import Main as jl
+jl.seval(&#39;using Pkg; Pkg.add(url = &quot;https://github.com/jbrea/MLPGradientFlow.jl.git&quot;)&#39;)</code></pre><h2 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h2><pre><code class="language-python hljs">import numpy as np
+import juliacall as jc
+from juliacall import Main as jl
+
+jl.seval(&#39;using MLPGradientFlow&#39;)
+
+mg = jl.MLPGradientFlow
+
+w = np.random.normal(size = (5, 2))/10
+b1 = np.zeros(5)
+a = np.random.normal(size = (1, 5))/5
+b2 = np.zeros(1)
+inp = np.random.normal(size = (2, 10_000))
+
+w_teach = np.random.normal(size = (4, 2))
+a_teach = np.random.normal(size = (1, 4))
+target = np.matmul(a_teach, jl.map(mg.sigmoid, np.matmul(w_teach, inp)))
+
+mg.train._jl_help() # look at the docstring
+
+# continue as in julia (see above), e.g.
+p = mg.params((w, b1), (a, b2))
+
+n = mg.Net(layers = ((5, mg.sigmoid, True), (1, jl.identity, True)),
+           input = inp, target = target)
+
+res = mg.train(n, p,
+               maxtime_ode = 2, maxtime_optim = 2,
+               maxiterations_optim = 10**3, verbosity = 1)
+
+# convert the result to a python dictionary with numpy arrays
+def convert2py(jldict):
+     d = dict(jldict)
+     for k, v in jldict.items():
+         if isinstance(v, jc.DictValue):
+             d[k] = convert2py(v)
+         if isinstance(v, jc.ArrayValue):
+             d[k] = v.to_numpy()
+     return d
+
+py_res = convert2py(res)
+
+# convert parameters in python format back to julia parameters
+p = mg.params(jc.convert(jl.Dict, py_res[&#39;x&#39;]))
+
+# save results in torch.pickle format
+mg.pickle(&quot;myfilename.pt&quot;, res)
+
+mg.hessian_spectrum(n, p)    # look at hessian spectrum
+
+# an MLP with 2 hidden layers with biases in the second hidden layer
+n2 = mg.Net(layers = ((5, mg.sigmoid, False), (4, mg.g, True), (2, mg.identity, False)),
+            input = inp, target = np.random.normal(size = (2, 10_000)))
+
+p2 = mg.params((w, None),
+               (np.random.normal(size = (4, 5)), np.zeros(4)),
+               (np.random.normal(size = (2, 4)), None))
+
+mg.loss(n2, p2)
+mg.gradient(n2, p2)
+</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tauinv/">« Separation of Timescales</a><a class="docs-footer-nextpage" href="../activations/">Activation Functions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.10.0 on <span class="colophon-date" title="Monday 31 March 2025 19:45">Monday 31 March 2025</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
