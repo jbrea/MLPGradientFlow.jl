@@ -4,7 +4,6 @@
 
 [![Documentation](https://img.shields.io/badge/docs-main-blue.svg)](https://jbrea.github.io/MLPGradientFlow.jl/dev)
 [![build](https://github.com/jbrea/MLPGradientFlow.jl/workflows/CI/badge.svg)](https://github.com/jbrea/MLPGradientFlow.jl/actions?query=workflow%3ACI)
--->
 
 </div>
 
