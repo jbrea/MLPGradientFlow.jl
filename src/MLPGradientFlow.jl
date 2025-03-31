@@ -353,7 +353,7 @@ struct Net{LS, L, I, T, W}
     weights::W
 end
 (n::Net)(x) = forward!(n, x)
-(n::Net)(x, input) = forward!(Net(n; input, derivs = 0), x)
+(n::Net)(x, input; kwargs...) = forward!(Net(n; input, derivs = 0, kwargs...), x)
 max_derivs_allocated(net::Net) = max_derivs_allocated(first(net.layers))
 function prepare_input(input, d, firstlayerbias; copy_input = true, verbosity = 1)
     if size(input, 1) == d && firstlayerbias
@@ -394,7 +394,7 @@ function Net(; layers, input = nothing, target = nothing,
                bias_adapt_input = true, derivs = 2, copy_input = true, verbosity = 1,
                Din = isnothing(input) ? error("Provide input or Din") : size(input, 1) - last(first(layers))*(1-bias_adapt_input))
     if !isnothing(input) && !isnothing(target) && !isa(eltype(target), Integer) && eltype(input) != eltype(target)
-        @warn "`input` ($T) and `target` ($S) have not the same type."
+        @warn "`input` ($(eltype(input)) and `target` ($(eltype(target)) have not the same type."
     end
     if layers[end][2] ≠ softmax && !isnothing(layers[end][1]) && !isnothing(target) && size(target, 1) ≠ layers[end][1]
         error("Output size of the network ($(layers[end][1])) does not match dimensionalty of the target ($(size(target, 1))).")
@@ -478,7 +478,7 @@ function Base.show(io::IO, teacher::TeacherNet)
     println(io, "TeacherNet")
     show(io, teacher.net)
 end
-(n::TeacherNet)(inp) = n.net(n.p, inp)
+(n::TeacherNet)(inp) = n.net(n.p, inp, verbosity = 0)
 
 ###
 ### gaussian input

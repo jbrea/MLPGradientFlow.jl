@@ -317,7 +317,9 @@ end
 @testset "teacher net" begin
     input = randn(2, 10)
     teacher = TeacherNet(; layers = ((2, softplus, true), (1, identity, true)), input)
-    @test teacher.net.target == teacher(input)
+    @test size(teacher(input)) == (1, 10)
+    teacher = TeacherNet(; layers = ((1, softplus, true),), Din = 3)
+    @test size(teacher(randn(3, 10))) == (1, 10)
 end
 
 @testset "tauinv" begin
