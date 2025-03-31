@@ -1,14 +1,22 @@
-# MLPGradientFlow.jl
+<div align="center">
 
-This package allows to integrate the gradient flow of the loss
-function of multi-layer perceptrons,
-$$\dot \theta = -\nabla_\theta \big(L(\theta) + R(\theta)\big)$$
-with barrier function
-$$R(\theta) =  \big(\frac12\|\theta\|_2^2 - c\big)^2 \mbox{if } \frac12\|\theta\|_2^2 > c \mbox{ and 0 otherwise}\, .$$
+# MLPGradientFlow
 
-Activation functions can be e.g. `relu`, `sigmoid` ( $1/(1 + \exp(-x))$ ), `sigmoid2` ( $erf(x/\sqrt{2})$ ), `tanh`, `softplus`, `gelu`, `g` (`g(x) = sigmoid(4x) + softplus(x)`), `selu`, `square`, `cube`, `polynomial = Poly(a₀, a₁, a₂, …)` (`polynomial(x) = a₀ + a₁x + a₂x² + ⋯`) or `softmax` (in the output layer).
+[![Documentation](https://img.shields.io/badge/docs-main-blue.svg)](https://jbrea.github.io/MLPGradientFlow.jl/dev)
+[![build](https://github.com/jbrea/MLPGradientFlow.jl/workflows/CI/badge.svg)](https://github.com/jbrea/MLPGradientFlow.jl/actions?query=workflow%3ACI)
+-->
 
-For more details see [MLPGradientFlow: going with the flow of multilayer perceptrons (and finding minima fast and accurately)](https://arxiv.org/abs/2301.10638).
+This package allows to investigate the loss landscape and training dynamics of multi-layer perceptrons.
+
+## Features
+
+- Train multi-layer perceptrons on the CPU to convergence, using first and second order optimization methods.
+- Fast implementations of gradients and hessians.
+- Follow gradient flow (using differential equation solvers) or popular (stochastic) gradient descent dynamics (Adam etc.).
+- Accurate approximations of loss function and its derivatives for infinite normally distributed input data, using Gauss-Hermite quadrature or symbolic integrals.
+- Utility functions to investigate teacher-student setups and loss landscape visualization.
+
+For more details see the [documentation](https://jbrea.github.io/MLPGradientFlow.jl/dev) and [MLPGradientFlow: going with the flow of multilayer perceptrons (and finding minima fast and accurately)](https://arxiv.org/abs/2301.10638).
 
 ## Installation
 
