@@ -371,10 +371,9 @@ end
           bias_adapt_input = true, derivs = 2, copy_input = true, verbosity = 1,
           Din = size(input, 1) - last(first(layers))*(1-bias_adapt_input))
 
-
     layers # ((num_neurons_layer1, activation_function_layer1, has_bias_layer1),
-              (num_neurons_layer2, activation_function_layer2, has_bias_layer2),
-              ...)
+           #  (num_neurons_layer2, activation_function_layer2, has_bias_layer2),
+           #   ...)
     input  # Dᵢₙ × N matrix
     target # Dₒᵤₜ × N matrix
     weights # nothing or N array
@@ -383,20 +382,21 @@ end
     copy_input = true       # copy the input when creating the net
 
 ### Example
+```@doctest
+julia> input = randn(2, 100)
+julia> target = randn(1, 100)
+julia> net = Net(; layers = ((10, softplus, true), (1, identity, true)),
+                   input, target);
 ```
-input = randn(2, 100)
-target = randn(1, 100)
-net = Net(layers = ((10, softplus, true), (1, identity, true)),
-          input = inp, target = targ)
 """
-function Net(; layers, input::AbstractArray{T}, target::AbstractArray{S},
+function Net(; layers, input = nothing, target = nothing,
                weights = nothing,
                bias_adapt_input = true, derivs = 2, copy_input = true, verbosity = 1,
-               Din = size(input, 1) - last(first(layers))*(1-bias_adapt_input)) where {T,S}
-    if T != S && !(S <: Integer)
+               Din = isnothing(input) ? error("Provide input or Din") : size(input, 1) - last(first(layers))*(1-bias_adapt_input))
+    if !isnothing(input) && !isnothing(target) && !isa(eltype(target), Integer) && eltype(input) != eltype(target)
         @warn "`input` ($T) and `target` ($S) have not the same type."
     end
-    if layers[end][2] ≠ softmax && !ismissing(layers[end][1]) && size(target, 1) ≠ layers[end][1]
+    if layers[end][2] ≠ softmax && !isnothing(layers[end][1]) && !isnothing(target) && size(target, 1) ≠ layers[end][1]
         error("Output size of the network ($(layers[end][1])) does not match dimensionalty of the target ($(size(target, 1))).")
     end
     if isa(target, AbstractVector{<:Integer})
@@ -405,10 +405,18 @@ function Net(; layers, input::AbstractArray{T}, target::AbstractArray{S},
         end
     end
     layerspec = layers
-    N = size(input, 2)
-    input = prepare_input(input, Din, last(first(layerspec)); copy_input, verbosity)
+    N = isnothing(input) ? 0 : size(input, 2)
+    if !isnothing(input)
+        T = eltype(input)
+        input = prepare_input(input, Din, last(first(layerspec)); copy_input, verbosity)
+    else
+        T = Float64
+    end
+    if !isnothing(target)
+        target = StaticStrideArray(copy(target))
+    end
     dims = (Din, first.(layerspec)...)
-    if ismissing(last(layerspec)[1])
+    if isnothing(last(layerspec)[1])
         layerspec = (layerspec[1:end-1]..., (size(target, 1), last(layerspec)[2:end]...))
     end
     i0 = 1
@@ -424,12 +432,11 @@ function Net(; layers, input::AbstractArray{T}, target::AbstractArray{S},
                     l
                     end
                for (i, (k, f, bias)) in pairs(layerspec)]...)
-    target = StaticStrideArray(copy(target))
     Net(Int(sum(getproperty.(layers, :nparams))), Din, layerspec, layers, input, target, weights)
 end
 Net(net::Net; input = net.input, kwargs...) = Net(; layers = net.layerspec, input, target = net.target, bias_adapt_input = (input !== net.input), copy_input = false, derivs = max_derivs_allocated(net), weights = net.weights, kwargs...)
 function Base.show(io::IO, n::Net)
-    println(io, "Multilayer Perceptron ($(n.nparams) parameters of type $(eltype(n.input)))\ninput dimensions: $(size(n.input, 1)-first(n.layers).bias)")
+    println(io, "Multilayer Perceptron ($(n.nparams) parameters of type $(eltype(n.layers[1].a)))\ninput dimensions: $(n.Din-first(n.layers).bias)")
     for l in n.layers
         show(io, l)
     end
@@ -440,16 +447,18 @@ struct TeacherNet{N,P}
     p::P
 end
 """
-    TeacherNet(; p = nothing, input, kwargs...)
+    TeacherNet(; p = nothing, kwargs...)
 
 Creates a network with parameters `p` attached. If `p == nothing`, [`random_params`](@ref) are generated.
 A `TeacherNet` is a callable object that returns the target given some input.
+Keyword arguments `kwargs` are passed to [`Net`](@ref).
 
 # Example
 ```
-julia> input = randn(3, 10^4);
+julia> teacher = TeacherNet(; layers = ((8, softplus, true), (1, identity, true)),
+                              Din = 3);
 
-julia> teacher = TeacherNet(; layers = ((8, softplus, true), (1, identity, true)), input);
+julia> input = randn(3, 10^4);
 
 julia> target = teacher(input);
 
@@ -458,13 +467,11 @@ julia> new_input = randn(3, 10^3);
 julia> new_target = teacher(new_input);
 ```
 """
-function TeacherNet(; p = nothing, input, kwargs...)
-    target = zeros(1, size(input, 2))
-    net = Net(; input, target, kwargs..., derivs = 0)
+function TeacherNet(; p = nothing, kwargs...)
+    net = Net(; derivs = 0, verbosity = 0, kwargs...)
     if p === nothing
         p = random_params(net)
     end
-    net.target .= net(p)
     TeacherNet(net, p)
 end
 function Base.show(io::IO, teacher::TeacherNet)
@@ -587,20 +594,30 @@ function _loss(net, x;
     end
     res
 end
-"""
-    loss(net, x, input = net.input, target = net.target;
-         verbosity = 1, losstype = MSE())
-
-Compute the loss of `net` at parameter value `x`.
-"""
-function loss(net::Net, x; input = net.input, target = net.target, kwargs...)
+function check_arguments(net, x, input, target)
     checkparams(net, x)
-    _net = if input != net.input || target != net.target
+    if isnothing(input)
+        error("This network does not have any input attached. Provide input.")
+    end
+    if isnothing(target)
+        error("This network does not have any target attached. Provide target.")
+    end
+    _net = if (input != net.input) || (target != net.target)
         Net(net; input, target)
     else
         net
     end
-    _loss(_net, x; kwargs...)/size(input, 2)
+end
+"""
+    loss(net, x, input = net.input, target = net.target;
+         verbosity = 1, losstype = MSE(), weights = net.weights, maxnorm = Inf,
+         merge = nothing)
+
+Compute the loss of `net` at parameter value `x`.
+"""
+function loss(net::Net, x; input = net.input, target = net.target, kwargs...)
+    _net = check_arguments(net, x, input, target)
+    _loss(_net, x; kwargs...)/n_samples(_net)
 end
 function ℓ′!(::MSE, l, target)
     @tturbo for m in indices(target, 1), n in indices(target, 2)
@@ -737,15 +754,15 @@ function gradient!(dx, net, x;
     dx
 end
 """
-    gradient(net, x)
+    gradient(net, x; input = net.input, target = net.target, kwargs...)
 
-Compute the gradient of `net` at parameter value `x`.
+Compute the gradient of `net` at parameter value `x`. See [loss](@ref) for `kwargs`.
 """
-function gradient(net, x; kwargs...)
-    checkparams(net, x)
+function gradient(net::Net, x; input = net.input, target = net.target, kwargs...)
+    _net = check_arguments(net, x, input, target)
     dx = zero(x)
-    gradient!(dx, net, x; kwargs...)
-    dx ./= n_samples(net)
+    gradient!(dx, _net, x; kwargs...)
+    dx ./= n_samples(_net)
 end
 
 function forward_g!(g, prev, layers, x, offset = StaticInt(0))
@@ -1026,21 +1043,21 @@ end
 Hessian(template::Hessian, H) = Hessian(template.blocks, template.offsets, H)
 Hessian(::Nothing, H) = H
 """
-    hessian(net, x)
+    hessian(net, x; input = net.input, target = net.target, kwargs...)
 
-Compute hessian of `net` at parameter value `x`.
+Compute hessian of `net` at parameter value `x`. See [loss](@ref) for `kwargs`.
 """
-function hessian(net, x; only_flat = isa(net, NetI), kwargs...)
-    checkparams(net, x)
-    H = only_flat ? zeros(eltype(x), length(x), length(x)) : Hessian(x)
-    hessian!(H, net, x; kwargs...) ./ n_samples(net)
+function hessian(net::Net, x; input = net.input, target = net.target, kwargs...)
+    _net = check_arguments(net, x, input, target)
+    H = Hessian(x)
+    hessian!(H, _net, x; kwargs...) ./ n_samples(_net)
 end
 """
-    hessian_spectrum(net, x)
+    hessian_spectrum(net, x; kwargs...)
 
-Compute the spectrum of the hessian of `net` at `x`.
+Compute the spectrum of the hessian of `net` at `x`. Keyword arguments are passed to [hessian](@ref).
 """
-hessian_spectrum(net, x) = eigen(Symmetric(hessian(net, x)))
+hessian_spectrum(net, x; kwargs...) = eigen(Symmetric(hessian(net, x; kwargs...)))
 
 ###
 ### Batch
@@ -1057,8 +1074,12 @@ end
 function step!(n, b::MiniBatch)
     start = b.start
     batchsize = b.batchsize
-    @views n.input .= b.input[:, start:start+batchsize-1]
-    @views n.target .= b.target[:, start:start+batchsize-1]
+    ninp, ntarg = n.input, n.target
+    inp, targ = b.input, b.target
+    @turbo for i in axes(inp, 1), j in 0:batchsize-1
+        ninp[i, j+1] = inp[i, start + j]
+        ntarg[i, j+1] = targ[i, start + j]
+    end
     b.start += batchsize
     if b.start > size(b.input, 2) - batchsize + 1
         b.start = 1
@@ -1169,6 +1190,8 @@ Base.@kwdef mutable struct OptimizationState{T,N,NE,LT,Tau,M,B,W}
 end
 scale!(x, ::Nothing) = x
 scale!(x, tauinv) = x .*= tauinv
+invscale!(x, ::Nothing) = x
+invscale!(x, tauinv) = x ./= tauinv
 function OptimizationState(net; maxnorm = Inf, progress_interval = 5., net_eval = net, batchsize = nothing, kwargs...)
     if !isnothing(batchsize) && batchsize != n_samples(net)
         if n_samples(net) % batchsize != 0
@@ -1176,8 +1199,8 @@ function OptimizationState(net; maxnorm = Inf, progress_interval = 5., net_eval 
         end
         batcher = MiniBatch(net.input, net.target, batchsize, 1)
         _net = Net(net,
-                   input = net.input[:, 1:batchsize],
-                   target = net.target[:, 1:batchsize],
+                   input = copy(net.input[:, 1:batchsize]),
+                   target = copy(net.target[:, 1:batchsize]),
                    bias_adapt_input = false)
     else
         batcher = FullBatch()
@@ -1271,6 +1294,17 @@ function get_functions(net, maxnorm; kwargs...)
     h = Hess(g)
     (l, g, h, OptimObj(h), NLOptObj(g))
 end
+
+layer_spec(net::Net) = net.layerspec
+layer_spec(net::NetI) = net.student.layerspec
+layers(net::Net) = net.layers
+layers(net::NetI) = net.student.layers
+weights(net::Net) = net.weights
+weights(::NetI) = nothing
+n_samples(net::Net) = size(net.input, 2)
+n_samples(net::NetI) = 1
+
+
 """
     train(net, x0; kwargs...)
 
@@ -1306,60 +1340,29 @@ Keyword arguments:
     exclude = String[]             # dictionary keys to exclude from the results dictionary
     include = nothing              # dictionary keys to include (everything if nothing)
 
+Runs training dynamics on `net` from initial point `x0`. If an `Optimisers` method, e.g. `Adam()` or `Descent()` is chosen for `alg`, this is the time-discrete dynamics
+`xₜ = tauinv * ∇ loss(net, xₜ₋₁)`
+where `loss(net, x) = sum((net(x) - net.target).^2) + R(x)` with `R(x) = 1/3 * (weightnorm(x) - maxnorm)^3 * I(weightnorm(x) > maxnorm) * n_samples(net)`. For ODE solvers, this is the continuous ordinary differential equation `ẋ = tauinv ∇ loss(net, x)`, which is integrated from `x(t = 0) = p` to `x(t = maxT)`. Note that `maxT` refers to time of the differential equation, whereas `maxtime_ode` (and `maxtime_optim`) refers to the amount of wall-clock time given to the computer to run the algorithms.
+
+If `maxiterations_optim > 0`, the result of this dynamics is given to a (second order) optimizer, to find accurately the nearest minimum.
+
 """
-layer_spec(net::Net) = net.layerspec
-layer_spec(net::NetI) = net.student.layerspec
-layers(net::Net) = net.layers
-layers(net::NetI) = net.student.layers
-weights(net::Net) = net.weights
-weights(::NetI) = nothing
 function train(net, p;
-               maxnorm = Inf,
+               alg = alg_default(p),
                verbosity = 1,
+               maxnorm = Inf,
                batchsize = nothing,
-               losstype = MSE(),
                show_progress = verbosity == 1,
                progress_interval = 5,
-               alg = alg_default(p),
-               optim_solver = optim_solver_default(p),
-               maxiterations_ode = 10^6,
-               maxiterations_optim = 10^5,
-               patience = 10^4,
                tauinv = nothing,
                merge = nothing,
-               hessian_template = default_hessian_template(net, p, maxiterations_ode, alg, maxiterations_optim, optim_solver, verbosity),
-               weights = weights(net),
-               kwargs...)
-    checkparams(net, p)
-    dx = gradient(net, p)
-    gnorminf = maximum(abs, dx)
-    _, g!, h!, fgh!, fg! = get_functions(net, maxnorm;
-                                         hessian_template = hessian_template,
-                                         patience,
-                                         losstype,
-                                         merge,
-                                         tauinv = isa(tauinv, ComponentArray) || isa(tauinv, NamedTuple) ? copy(ComponentArray(tauinv)) : tauinv,
-                                         batchsize,
-                                         show_progress,
-                                         weights,
-                                         progress_interval = float(progress_interval),
-                                         verbosity)
-    lossfunc = u -> loss(net, u; losstype, weights)
-    train(net, lossfunc, g!, h!, fgh!, fg!, p;
-          verbosity, losstype,
-          maxiterations_ode, maxiterations_optim,
-          alg, optim_solver,
-          kwargs...)
-end
-n_samples(net::Net) = size(net.input, 2)
-n_samples(net::NetI) = 1
-function train(net, lossfunc, g!, h!, fgh!, fg!, p;
-               alg = alg_default(p),
                optim_solver = optim_solver_default(p),
                maxiterations_ode = 10^6,
                maxiterations_optim = 10^5,
+               hessian_template = default_hessian_template(net, p, maxiterations_ode, alg, maxiterations_optim, optim_solver, verbosity),
+               weights = weights(net),
+               patience = 10^4,
                g_tol = 1e-13,
-               verbosity = 1,
                abstol = 1e-6,
                reltol = 1e-6,
                save_everystep = true,
@@ -1375,18 +1378,36 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
                include = nothing,
                exclude = String[],
                dt = nothing,
-               optim_options = Optim.Options(iterations = maxiterations_optim,
-                                               time_limit = maxtime_optim,
-                                               f_abstol = -eps(),
-                                               f_reltol = -eps(),
-                                               x_abstol = -eps(),
-                                               x_reltol = -eps(),
-                                               allow_f_increases = false,
-                                               g_abstol = g_tol,
-                                               g_reltol = g_tol,
-                                               callback = _ -> converged(fgh!.h.g.l.o)
-                                              )
+               optim_options = nothing
     )
+    checkparams(net, p)
+    dx = gradient(net, p)
+    gnorminf = maximum(abs, dx)
+    _, g!, h!, fgh!, fg! = get_functions(net, maxnorm;
+                                         hessian_template = hessian_template,
+                                         patience,
+                                         losstype,
+                                         merge,
+                                         tauinv = isa(tauinv, ComponentArray) || isa(tauinv, NamedTuple) ? copy(ComponentArray(tauinv)) : tauinv,
+                                         batchsize,
+                                         show_progress,
+                                         weights,
+                                         progress_interval = float(progress_interval),
+                                         verbosity)
+    lossfunc = u -> MLPGradientFlow.loss(net, u; losstype, weights)
+    if isnothing(optim_options)
+        optim_options = Optim.Options(iterations = maxiterations_optim,
+                                       time_limit = maxtime_optim,
+                                       f_abstol = -eps(),
+                                       f_reltol = -eps(),
+                                       x_abstol = -eps(),
+                                       x_reltol = -eps(),
+                                       allow_f_increases = false,
+                                       g_abstol = g_tol,
+                                       g_reltol = g_tol,
+                                       callback = _ -> converged(fgh!.h.g.l.o)
+                                      )
+    end
     x = copy(p)
     G = zero(x)
     trajectory = nothing
@@ -1405,7 +1426,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
             state = Optimisers.init(alg, x)
             while true
                 g!(G, x)
-                G .*= 1/n_samples(net) # scale with data
+                G .*= 1/n_samples(g!.l.o.net) # scale with data
                 state, dx = Optimisers.apply!(alg, state, x, G)
                 x .-= dx
                 if save_everystep
@@ -1553,7 +1574,7 @@ function train(net, lossfunc, g!, h!, fgh!, fg!, p;
     N = isa(net, Net) ? size(net.input, 2) : 1.
     gnorm = maximum(abs, G) / N
     g!(G, x) # recompute with regularized loss
-    gnorm_regularized = maximum(abs, G) / N
+    gnorm_regularized = maximum(abs, invscale!(G, tauinv)) / N
     loss = lossfunc(x)
     rawres = (; ode = sol, optim = res, ode_x, optim_state = g!.l.o,
               x, init = p, loss, ode_loss, gnorm, gnorm_regularized,
@@ -1682,9 +1703,9 @@ function unpickle(filename)
     Pickle.Torch.THload(filename)
 end
 
-input_dim(net::Net) = size(net.input, 1) - first(net.layers).bias
+input_dim(net::Net) = net.Din
 """
-    random_params(net)
+    random_params(net; kwargs...)
 """
 random_params(net::NetI; kwargs...) = random_params(net.student; kwargs...)
 random_params(net; kwargs...) = random_params(Random.GLOBAL_RNG, net; kwargs...)
@@ -1693,7 +1714,7 @@ random_params(net; kwargs...) = random_params(Random.GLOBAL_RNG, net; kwargs...)
 """
 function random_params(rng, net::Net; distr_fn = glorot_normal)
     glorot(rng, (input_dim(net),
-                 Int.(getproperty.(net.layers, :k))...), eltype(net.input),
+                 Int.(getproperty.(net.layers, :k))...), eltype(net.layers[1].a),
            biases = getproperty.(net.layers, :bias); distr_fn)
 end
 glorot_normal(in, out, T = Float64) = glorot_normal(Random.GLOBAL_RNG, in, out, T)
@@ -1722,6 +1743,11 @@ function params(layers...)
     ComponentArray(; [Symbol(:w, i) => append_bias!(w)
                       for (i, w) in pairs(layers)]...)
 end
+"""
+    params(layers::AbstractDict)
+
+Converts parameters in dictionary form to `ComponentArray` form.
+"""
 function params(layers::AbstractDict)
     ComponentArray(; [Symbol(k) => Array(v) for (k, v) in layers]...)
 end

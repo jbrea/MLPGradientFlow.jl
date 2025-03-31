@@ -339,6 +339,13 @@ function _weights_and_biases!(w, b, p)
     copyto!(w, 1, p, 1, n),
     copyto!(b, 1, p, n+1, length(b))
 end
+"""
+    NetI(teacher, student; T = eltype(student.input),
+         g1 = _stride_arrayize(NormalIntegral(d = 1)),
+         g2 = _stride_arrayize(NormalIntegral(d = 2)))
+
+
+"""
 function NetI(teacher, student; T = eltype(student.input),
                g1 = _stride_arrayize(NormalIntegral(d = 1)),
                g2 = _stride_arrayize(NormalIntegral(d = 2)))
@@ -392,6 +399,7 @@ function NetI(teacher, student; T = eltype(student.input),
           zeros(T, k, 5),
           loss_correction_t2)
 end
+hessian(net::NetI, x; kwargs...) = _hessian!(zeros(length(x), length(x)), net, x; kwargs...)
 function _hessian!(H, net::NetI{T}, x; backprop = true, forward = true, second_order = true, weights = nothing, losstype = MSE(), derivs = nothing) where T
     (; g1, g2, w1, b1, w2, b2, rw1, rwt, w1t, b1t, w2t, b2t, g0, gr, gs, u, v, dg0, dgr, dgru, dgrv) = net
     forward && _loss(net, x)
@@ -559,6 +567,7 @@ function backward!(net::NetI, x; forward = true)
     dgdrub!(dgru, g2, f, rw1, b1, ft, rwt, b1t, u)
     dgdrvb!(dgrv, g2, f, rw1, b1, v)
 end
+gradient(net::NetI, x; kwargs...) = _gradient!(zero(x), net, x; kwargs...)
 function _gradient!(dx, net::NetI, x; backward = true, forward = true, weights = nothing, derivs = nothing, losstype = MSE())
     (; w1, b1, w2, b2, w1t, w2t, b2t, rw1, rwt, gr, gt, gs, dg0, dgr, dgru, dgrv, u, v) = net
     forward && _loss(net, x)

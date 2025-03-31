@@ -1,5 +1,13 @@
+"""
+    trajectory_distance(res1, res2)
 
+"""
 trajectory_distance(res1::Dict, res2::Dict) = trajectory_distance(res1["trajectory"], res2["trajectory"])
+"""
+    trajectory_distance(trajectory, reference_trajectory)
+
+Searches for the closest points of `trajectory` in `reference_trajectory` and returns the distances, time points of the `reference_trajectory` and the indices in `reference_trajectory`.
+"""
 function trajectory_distance(traj, ref)
     xtraj = params.(collect(values(traj)))
     xref = params.(collect(values(ref)))
@@ -27,16 +35,34 @@ function trajectory_distance(traj, ref)
     dists, collect(keys(ref))[idxs], idxs
 end
 
-function minloss(net, θ, v1, v2, a1, a2)
+struct LinearSubspace{V,U,B}
+    ref::V
+    v1::V
+    v2::V
+    u::U
+    b::B
+end
+function LinearSubspace(ref, v1, v2)
     N = length(v1)
-    _v1 = 2*normalize(v1)
+    _v1 = normalize(v1)
     _v2 = normalize(v2)
-    u, = svd([_v1 _v2 zeros(N, N - 2)])
-    v = θ + a1*_v1/2 + a2*_v2
+    u, = svd([2*_v1 _v2 zeros(N, N - 2)]) # 2*_v1 for ordering
     b = u[:, 3:end]
-    _grad(G, u) = G .= b' * gradient(net, b * u + v)
-    _loss(u) = loss(net, b * u + v)
-    sol = Optim.optimize(_loss, _grad, zeros(N-2), LBFGS())
-    x = Optim.minimizer(sol)
-    (; loss = _loss(x), p = b * x + v, x, delta_loss = _loss(zeros(N-2)) - _loss(x), to_local_coords = p -> u[:, 1:2]' * (θ - p))
+    LinearSubspace(ref, _v1, _v2, u, b)
+end
+_gradient!(G, ls::LinearSubspace, net, x, v) = G .= ls.b' * gradient(net, ls.b * x + v)
+_loss(ls::LinearSubspace, net, x, v) = loss(net, ls.b * x + v)
+to_local_coords(ls::LinearSubspace, p) = l.u[:, 1:2]' * (ls.ref - p)
+function minloss(net, ls::LinearSubspace, a1, a2)
+    v = ls.ref + a1 * ls.v1 + a2 * ls.v2
+    _grad = (G, x) -> _gradient!(G, ls, net, x, v)
+    _loss = x -> _loss(ls, net, x, v)
+    sol = Optim.optimize(_loss, _grad, zeros(length(θ)-2), LBFGS())
+    x = Optim.optimizer(sol)
+    loss = _loss(x)
+    (; loss, p = ls.b * x + v, delta_loss = _loss(zero(x)) - loss)
+end
+function minloss(net, ref, v1, v2, a1, a2)
+    ls = LinearSubspace(ref, v1, v2, a1, a2)
+    minloss(net, ls, a1, a2)
 end

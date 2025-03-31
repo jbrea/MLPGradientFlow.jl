@@ -1,0 +1,14 @@
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+/deps/deps.jl
+/docs/build
+*.pt*
+*.dat*
+*.tikz*
+*.csv*
+docs/build
+
+# pixi environments
+.pixi
+*.egg-info

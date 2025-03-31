@@ -74,7 +74,14 @@ end
 """
     gauss_hermite_net(target_function, net::Net; kwargs...)
 
-Create from `net` a network with input points and weights obtained from [`NormalIntegral`](@ref), to which `kwargs` are passed. The `target_function` is used to compute the target values. Note that in more than 2 input dimensions the number of points is excessively large (with default settings for `NormalIntegral` more than a million points are generated in 3 dimensions).
+Create from `net` a network with input points and weights obtained from [`NormalIntegral`](@ref), to which `kwargs` are passed. The `target_function` is used to compute the target values. Note that in more than 2 input dimensions the number of points is excessively large (with default settings for [`NormalIntegral`](@ref) more than a million points are generated in 3 dimensions).
+
+### Example
+```
+julia> net = gauss_hermite_net(x -> x[1, :] .^ 2,
+                               Net(layers = ((5, softplus, false),
+                                             (1, identity, true)), Din = 2))
+```
 """
 function gauss_hermite_net(target_function, net::Net; kwargs...)
     net.Din > 2 && @info "Input dimension $(net.Din) larger than 2; this may be very slow!"
