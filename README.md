@@ -6,6 +6,8 @@
 [![build](https://github.com/jbrea/MLPGradientFlow.jl/workflows/CI/badge.svg)](https://github.com/jbrea/MLPGradientFlow.jl/actions?query=workflow%3ACI)
 -->
 
+</div>
+
 This package allows to investigate the loss landscape and training dynamics of multi-layer perceptrons.
 
 ## Features
