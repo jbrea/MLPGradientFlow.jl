@@ -35,7 +35,7 @@ MLPGradientFlow.to_local_coords
 MLPGradientFlow.subspace_minloss
 MLPGradientFlow.grow_net
 MLPGradientFlow.shrink_net
-MLPGradientFlow.split
+MLPGradientFlow.split_neuron
 ```
 
 ## Saving

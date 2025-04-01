@@ -111,11 +111,11 @@ end
 grow_net(net::NetI) = NetI(net.teacher, grow_net(net.student))
 shrink_net(net::NetI) = NetI(net.teacher, shrink_net(net.student))
 """
-    split(p, i, γ, j = i+1)
+    split_neuron(p, i, γ, j = i+1)
 
 Duplicate hidden neuron `i` with mixing ratio `γ` and insert the new neuron at position `j`. Works only for the parameters `p` of a network with a single hidden layer.
 """
-function split(p::ComponentArray, i, γ, j = i+1)
+function split_neuron(p::ComponentArray, i, γ, j = i+1)
     _w1 = p.w1
     _w2 = p.w2
     w1 = [_w1[1:j-1, :]; _w1[i:i, :]; _w1[j:end, :]]
