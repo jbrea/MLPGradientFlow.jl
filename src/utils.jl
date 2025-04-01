@@ -86,3 +86,39 @@ function subspace_minloss(net, ls::LinearSubspace, a1, a2)
     loss = _loss(x)
     (; loss, p = ls.b * x + v, delta_loss = _loss(zero(x)) - loss)
 end
+"""
+    grow_net(net)
+
+Add one neuron to the hidden layer. Works only for networks with a single hidden layer.
+"""
+function grow_net(net::Net)
+    l = net.layerspec
+    net = Net(layers = ((l[1][1]+1, l[1][2], l[1][3]), l[2]),
+              bias_adapt_input = false,
+              input = net.input, target = net.target, derivs = 2, verbosity=0)
+end
+"""
+    shrink_net(net)
+
+Remove one neuron from the hidden layer. Works only with networks with a single hidden layer.
+"""
+function shrink_net(net::Net)
+    l = net.layerspec
+    net = Net(layers = ((l[1][1]-1, l[1][2], l[1][3]), l[2]),
+              bias_adapt_input = false,
+              input = net.input, target = net.target, derivs = 2, verbosity=0)
+end
+grow_net(net::NetI) = NetI(net.teacher, grow_net(net.student))
+shrink_net(net::NetI) = NetI(net.teacher, shrink_net(net.student))
+"""
+    split(p, i, γ, j = i+1)
+
+Duplicate hidden neuron `i` with mixing ratio `γ` and insert the new neuron at position `j`. Works only for the parameters `p` of a network with a single hidden layer.
+"""
+function split(p::ComponentArray, i, γ, j = i+1)
+    _w1 = p.w1
+    _w2 = p.w2
+    w1 = [_w1[1:j-1, :]; _w1[i:i, :]; _w1[j:end, :]]
+    w2 = [_w2[:, 1:i-1] γ * _w2[:, i] _w2[:, i+1:j-1]  _w2[:, i] * (1-γ) _w2[:, j:end]]
+    ComponentArray(; w1, w2)
+end

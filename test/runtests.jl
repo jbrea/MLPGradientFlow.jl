@@ -248,52 +248,6 @@ end
     @test loss(n, res.ode.u[end]) ≥ loss(n, res.x) - sqrt(eps())
 end
 
-@testset "distributed" begin
-    import MLPGradientFlow: Net, g, sigmoid, train, random_params, params, gradient, hessian, RK4
-    # without bias
-    n = Net(layers = ((2, g, false), (1, sigmoid, false)),
-            input = rand(2, 10), target = rand(1, 10))
-    x = ntuple(_ -> random_params(n), 2)
-    res = train(n, x[1], maxtime_ode = Inf, maxtime_optim = Inf,
-                alg = RK4(),
-                maxiterations_ode = 3, maxiterations_optim = 0)
-    res_distr = train(n, x, maxtime_ode = Inf, maxtime_optim = Inf,
-                alg = RK4(),
-                maxiterations_ode = 3, maxiterations_optim = 0)
-    i = findfirst(d -> params(d[1]["init"]) == x[1], res_distr)
-    @test params(res["x"]) ≈ params(res_distr[i][1]["x"]) atol = 1e-5
-    @test res["loss"] ≈ res_distr[i][1]["loss"] atol = 1e-5
-end
-
-GC.gc()
-
-@testset "batch" begin
-    import MLPGradientFlow: get_functions
-    Random.seed!(12)
-    input = randn(2, 30)
-    net = Net(; layers = ((2, relu, true), (1, identity, false)), input, target = randn(1, 30))
-    funcs_fullbatch = get_functions(net, Inf);
-    funcs_weighted = get_functions(net, Inf, weights = [zeros(10); ones(10); zeros(10)]);
-    funcs_minibatch = get_functions(net, Inf, batchsize = 10);
-    p = random_params(net)
-    @test funcs_fullbatch[1](p) == funcs_minibatch[1](p) # loss evaluation on full batch in both cases
-    dp_fullbatch = zero(p)
-    funcs_fullbatch[2](dp_fullbatch, p)
-    dp_weighted = zero(p)
-    funcs_weighted[2](dp_weighted, p)
-    dp_minibatch = zero(p)
-    dp_tmp = zero(p)
-    funcs_minibatch[2](dp_tmp, p) # first batch
-    dp_minibatch .+= dp_tmp
-    funcs_minibatch[2](dp_tmp, p) # second batch
-    dp_minibatch .+= dp_tmp
-    @test dp_tmp ≈ dp_weighted
-    funcs_minibatch[2](dp_tmp, p) # third batch
-    dp_minibatch .+= dp_tmp
-    @test dp_fullbatch ≈ dp_minibatch
-    @test net.input[1:2, 1:end] == input # checks for ugly bug with StrideArray views
-end
-
 @testset "crossentropy" begin
     import MLPGradientFlow: NegativeLogLikelihood
     inp = randn(10, 100)
@@ -324,6 +278,33 @@ end
     @test size(teacher(input)) == (1, 10)
     teacher = TeacherNet(; layers = ((1, softplus, true),), Din = 3)
     @test size(teacher(randn(3, 10))) == (1, 10)
+end
+
+@testset "batch" begin
+    import MLPGradientFlow: get_functions
+    Random.seed!(12)
+    input = randn(2, 30)
+    net = Net(; layers = ((2, relu, true), (1, identity, false)), input, target = randn(1, 30))
+    funcs_fullbatch = get_functions(net, Inf);
+    funcs_weighted = get_functions(net, Inf, weights = [zeros(10); ones(10); zeros(10)]);
+    funcs_minibatch = get_functions(net, Inf, batchsize = 10);
+    p = random_params(net)
+    @test funcs_fullbatch[1](p) == funcs_minibatch[1](p) # loss evaluation on full batch in both cases
+    dp_fullbatch = zero(p)
+    funcs_fullbatch[2](dp_fullbatch, p)
+    dp_weighted = zero(p)
+    funcs_weighted[2](dp_weighted, p)
+    dp_minibatch = zero(p)
+    dp_tmp = zero(p)
+    funcs_minibatch[2](dp_tmp, p) # first batch
+    dp_minibatch .+= dp_tmp
+    funcs_minibatch[2](dp_tmp, p) # second batch
+    dp_minibatch .+= dp_tmp
+    @test dp_tmp ≈ dp_weighted
+    funcs_minibatch[2](dp_tmp, p) # third batch
+    dp_minibatch .+= dp_tmp
+    @test dp_fullbatch ≈ dp_minibatch
+    @test net.input[1:2, 1:end] == input # checks for ugly bug with StrideArray views
 end
 
 @testset "tauinv" begin
@@ -396,3 +377,21 @@ import MLPGradientFlow: integrate, NormalIntegral, _stride_arrayize, ϕ, ϕϕ, �
         end
     end
 end
+
+@testset "distributed" begin
+    import MLPGradientFlow: Net, g, sigmoid, train, random_params, params, gradient, hessian, RK4
+    # without bias
+    n = Net(layers = ((2, g, false), (1, sigmoid, false)),
+            input = rand(2, 10), target = rand(1, 10))
+    x = ntuple(_ -> random_params(n), 2)
+    res = train(n, x[1], maxtime_ode = Inf, maxtime_optim = Inf,
+                alg = RK4(),
+                maxiterations_ode = 3, maxiterations_optim = 0)
+    res_distr = train(n, x, maxtime_ode = Inf, maxtime_optim = Inf,
+                alg = RK4(),
+                maxiterations_ode = 3, maxiterations_optim = 0)
+    i = findfirst(d -> params(d[1]["init"]) == x[1], res_distr)
+    @test params(res["x"]) ≈ params(res_distr[i][1]["x"]) atol = 1e-5
+    @test res["loss"] ≈ res_distr[i][1]["loss"] atol = 1e-5
+end
+

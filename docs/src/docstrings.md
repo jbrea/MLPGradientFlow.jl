@@ -33,6 +33,9 @@ MLPGradientFlow.trajectory_distance
 MLPGradientFlow.LinearSubspace
 MLPGradientFlow.to_local_coords
 MLPGradientFlow.subspace_minloss
+MLPGradientFlow.grow_net
+MLPGradientFlow.shrink_net
+MLPGradientFlow.split
 ```
 
 ## Saving
