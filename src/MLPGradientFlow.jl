@@ -1362,7 +1362,7 @@ function train(net, p;
                hessian_template = default_hessian_template(net, p, maxiterations_ode, alg, maxiterations_optim, optim_solver, verbosity),
                weights = weights(net),
                patience = 10^4,
-               g_tol = 1e-13,
+               g_tol = 1e-18,
                abstol = 1e-6,
                reltol = 1e-6,
                save_everystep = true,
@@ -1404,7 +1404,6 @@ function train(net, p;
                                        x_reltol = -eps(),
                                        allow_f_increases = false,
                                        g_abstol = g_tol,
-                                       g_reltol = g_tol,
                                        callback = _ -> converged(fgh!.h.g.l.o)
                                       )
     end
