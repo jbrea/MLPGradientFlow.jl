@@ -42,6 +42,11 @@ struct LinearSubspace{V,U,B}
     u::U
     b::B
 end
+"""
+    LinearSubspace(ref, v1, v2)
+
+Construct a 2D linear subspace from `ref` point in directions `v1` and `v2`. See also [`subspace_minloss`](@ref)
+"""
 function LinearSubspace(ref, v1, v2)
     N = length(v1)
     _v1 = normalize(v1)
@@ -52,8 +57,27 @@ function LinearSubspace(ref, v1, v2)
 end
 _gradient!(G, ls::LinearSubspace, net, x, v) = G .= ls.b' * gradient(net, ls.b * x + v)
 _loss(ls::LinearSubspace, net, x, v) = loss(net, ls.b * x + v)
+"""
+    to_local_coords(ls::LinearSubspace, p)
+
+Project point `p` to the linear subspace `ls`.
+"""
 to_local_coords(ls::LinearSubspace, p) = l.u[:, 1:2]' * (ls.ref - p)
-function minloss(net, ls::LinearSubspace, a1, a2)
+"""
+    subspace_minloss(net, ref, v1, v2, a1, a2)
+
+Minimize loss in the subspace orthogonal to `v1` and `v2` with the point in the 2D subspace fixed to `ref + a1 * v1 + a2 * v2`.
+"""
+function subspace_minloss(net, ref, v1, v2, a1, a2)
+    ls = LinearSubspace(ref, v1, v2, a1, a2)
+    subspace_minloss(net, ls, a1, a2)
+end
+"""
+    subspace_minloss(net, ls::LinearSubspace, a1, a2)
+
+Minimize loss in the subspace orthogonal to `ls` with the point in `ls` fixed to `ls.ref + a1 * ls.v1 + a2 * ls.v2`.
+"""
+function subspace_minloss(net, ls::LinearSubspace, a1, a2)
     v = ls.ref + a1 * ls.v1 + a2 * ls.v2
     _grad = (G, x) -> _gradient!(G, ls, net, x, v)
     _loss = x -> _loss(ls, net, x, v)
@@ -61,8 +85,4 @@ function minloss(net, ls::LinearSubspace, a1, a2)
     x = Optim.optimizer(sol)
     loss = _loss(x)
     (; loss, p = ls.b * x + v, delta_loss = _loss(zero(x)) - loss)
-end
-function minloss(net, ref, v1, v2, a1, a2)
-    ls = LinearSubspace(ref, v1, v2, a1, a2)
-    minloss(net, ls, a1, a2)
 end

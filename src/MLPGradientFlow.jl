@@ -1552,8 +1552,6 @@ function train(net, p;
                 "mingradnorm"
             elseif Optim.converged(res)
                 "converged"
-            elseif isa(res.ls_success, Bool) && !res.ls_success
-                "line search failed"
             elseif Optim.f_increased(res) && !Optim.iteration_limit_reached(res)
                 "objective increased between iterations"
             else

@@ -29,6 +29,10 @@ random_params
 params
 params2dict
 MLPGradientFlow.NormalIntegral
+MLPGradientFlow.trajectory_distance
+MLPGradientFlow.LinearSubspace
+MLPGradientFlow.to_local_coords
+MLPGradientFlow.subspace_minloss
 ```
 
 ## Saving
