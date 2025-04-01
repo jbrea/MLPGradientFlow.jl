@@ -1199,8 +1199,8 @@ function OptimizationState(net; maxnorm = Inf, progress_interval = 5., net_eval 
         end
         batcher = MiniBatch(net.input, net.target, batchsize, 1)
         _net = Net(net,
-                   input = Array(net.input[:, 1:batchsize]),
-                   target = Array(net.target[:, 1:batchsize]),
+                   input = zeros(size(net.input, 1), batchsize),
+                   target = zeros(size(net.target, 1), batchsize),
                    bias_adapt_input = false)
     else
         batcher = FullBatch()
