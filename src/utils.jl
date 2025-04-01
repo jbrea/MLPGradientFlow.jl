@@ -80,9 +80,9 @@ Minimize loss in the subspace orthogonal to `ls` with the point in `ls` fixed to
 function subspace_minloss(net, ls::LinearSubspace, a1, a2)
     v = ls.ref + a1 * ls.v1 + a2 * ls.v2
     _grad = (G, x) -> _gradient!(G, ls, net, x, v)
-    _loss = x -> _loss(ls, net, x, v)
-    sol = Optim.optimize(_loss, _grad, zeros(length(θ)-2), LBFGS())
-    x = Optim.optimizer(sol)
+    _loss = x -> MLPGradientFlow._loss(ls, net, x, v)
+    sol = Optim.optimize(_loss, _grad, zeros(length(ls.ref)-2), LBFGS())
+    x = Optim.minimizer(sol)
     loss = _loss(x)
     (; loss, p = ls.b * x + v, delta_loss = _loss(zero(x)) - loss)
 end

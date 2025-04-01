@@ -1076,8 +1076,10 @@ function step!(n, b::MiniBatch)
     batchsize = b.batchsize
     ninp, ntarg = n.input, n.target
     inp, targ = b.input, b.target
-    @turbo for i in axes(inp, 1), j in 0:batchsize-1
+    @tturbo for i in axes(inp, 1), j in 0:batchsize-1
         ninp[i, j+1] = inp[i, start + j]
+    end
+    @tturbo for i in axes(targ, 1), j in 0:batchsize-1
         ntarg[i, j+1] = targ[i, start + j]
     end
     b.start += batchsize
