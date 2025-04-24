@@ -1111,15 +1111,18 @@ function swapsign(f!)
         end
     end
 end
-Base.@kwdef mutable struct ODETerminator{T}
+Base.@kwdef mutable struct Terminator{T}
     i::Int = 0
     t0::Float64 = 0.
     maxtime::Float64 = 180.
     maxiter::Int = typemax(Int)
     stopped_by::String = ""
+    minloss::Float64 = 0
+    min_gnorm::Float64 = 0
     o::T
 end
-function (terminator::ODETerminator)(u, t, integrator)
+(terminator::Terminator)(_) = terminator(nothing, 0., nothing)
+function (terminator::Terminator)(u, t, integrator)
     if terminator.i == 0
         terminator.t0 = time()
     end
@@ -1129,21 +1132,23 @@ function (terminator::ODETerminator)(u, t, integrator)
         terminator.stopped_by = "patience ($(terminator.o.patience))"
         true
     elseif Δ > terminator.maxtime
-        terminator.stopped_by = "maxtime_ode > $(terminator.maxtime)s"
+        terminator.stopped_by = "maxtime > $(terminator.maxtime)s"
         true
     elseif t > 1e300
         terminator.stopped_by = "t > 1e300"
         true
     elseif terminator.i ≥ terminator.maxiter
-        terminator.stopped_by = "maxiterations_ode ≥ $(terminator.maxiter)"
+        terminator.stopped_by = "maxiterations ≥ $(terminator.maxiter)"
+        true
+    elseif terminator.minloss ≥ terminator.o.bestl / n_samples(terminator.o.net_eval)
+        terminator.stopped_by = "minloss ≤ $(terminator.minloss)"
+        true
+    elseif terminator.min_gnorm ≥ terminator.o.bestgnorm / n_samples(terminator.o.net_eval)
+        terminator.stopped_by = "min_gnorm ≤ $(terminator.min_gnorm)"
         true
     else
         false
     end
-end
-function terminator(o; maxtime = 20, maxiter = typemax(Int), losstype = MSE())
-    DiscreteCallback(ODETerminator(; o, maxtime = float(maxtime), maxiter),
-                     terminate!)
 end
 function optim_solver_default(x)
     length(x) ≤ 128 && return Newton(linesearch = Optim.LineSearches.HagerZhang(linesearchmax = 1000))
@@ -1178,6 +1183,7 @@ Base.@kwdef mutable struct OptimizationState{T,N,NE,LT,Tau,M,B,W}
     k_last_best::Int = 0
     bestl::Float64 = Inf
     bestx::T = random_params(net)
+    bestgnorm::Float64 = Inf
     maxnorm::Float64 = Inf
     verbosity::Int = 0
     show_progress::Bool = true
@@ -1219,11 +1225,6 @@ function (l::Loss)(x; nx = weightnorm(x), forward = true, derivs = 0)
                  losstype = o.losstype, forward, nx, maxnorm = o.maxnorm,
                  merge = o.merge, weights = o.weights, derivs)
     o.fk += 1
-    if loss < o.bestl
-        o.k_last_best = o.fk
-        o.bestl = loss
-        o.bestx .= x
-    end
     loss
 end
 struct Grad{T,N}
@@ -1234,13 +1235,25 @@ function (g::Grad)(dx, x; nx = weightnorm(x), forward = true, kwargs...)
     step!(o.net, o.batcher)
     gradient!(dx, o.net, x; forward, nx, maxnorm = o.maxnorm, merge = o.merge, weights = o.weights, kwargs...)
     if forward == true && start_of_epoch(o.batcher)
-        g.l(x; nx, forward = o.net !== o.net_eval)
+        loss = g.l(x; nx, forward = o.net !== o.net_eval)
+        if loss < o.bestl
+            o.k_last_best = o.fk
+            o.bestl = loss
+            o.bestx .= x
+            _dx = if o.net !== o.net_eval
+                _dx = copy(dx)
+                gradient!(_dx, o.net_eval, x; forward = false, nx, maxnorm = o.maxnorm, merge = o.merge, weigths = o.weights, kwargs...)
+            else
+                dx
+            end
+            o.bestgnorm = maximum(abs, _dx)
+        end
     end
     o.gk += 1
     if o.show_progress
         if time() - o.t0 > o.progress_interval
             o.t0 = time()
-            @printf "%s: evals: (ℓ: %6i, ∇: %6i, ∇²: %6i), loss: %g\n" now() o.fk o.gk o.hk o.bestl / n_samples(o.net_eval)
+            @printf "%s: evals: (ℓ: %6i, ∇: %6i, ∇²: %6i), loss: %g, gnorm_regularized: %g\n" now() o.fk o.gk o.hk o.bestl / n_samples(o.net_eval) o.bestgnorm / n_samples(o.net_eval)
         end
     end
     scale!(dx, g.l.o.tauinv)
@@ -1328,10 +1341,10 @@ Keyword arguments:
     maxiterations_ode = 10^6       # maximum iterations of ODE solver
 
     maxiterations_optim = 10^5     # maximum iterations of optimizer
-    g_tol = 1e-12                  # stop if gradient norm is below g_tol
-    patience = 10^4                # Number of steps without decrease of the loss function until converged
+    min_gnorm = 1e-15              # stop if (the regularized) gradient ∞-norm is below min_gnorm
+    patience = 10^6                # Number of steps without decrease of the loss function until converged
     tauinv = nothing               # nothing, a scalar or a ComponentArray of shape `x0` with inverse time scales
-    minloss = 1e-30                # stop if MSE loss is below minloss
+    minloss = 2e-32                # stop if MSE loss is below minloss
     maxtime_optim = 2*60           # maximum amount of time in seconds for the Newton optimization
     optim_solver = optim_solver_default(p) # optimizer: NewtonTrustRegion() for length(p) ≤ 32, :LD_SLSQP for length(p) ≤ 1000, BFGS() otherwise
 
@@ -1348,6 +1361,8 @@ where `loss(net, x) = sum((net(x) - net.target).^2) + R(x)` with `R(x) = 1/3 * (
 
 If `maxiterations_optim > 0`, the result of this dynamics is given to a (second order) optimizer, to find accurately the nearest minimum.
 
+All gradient norms (`min_gnorm`, and return values `gnorm` and `gnorm_regularized`)  are measured in the infinity norm.
+
 """
 function train(net, p;
                alg = alg_default(p),
@@ -1363,8 +1378,8 @@ function train(net, p;
                maxiterations_optim = 10^5,
                hessian_template = default_hessian_template(net, p, maxiterations_ode, alg, maxiterations_optim, optim_solver, verbosity),
                weights = weights(net),
-               patience = 10^4,
-               g_tol = 1e-18,
+               patience = 10^6,
+               min_gnorm = 1e-15,
                abstol = 1e-6,
                reltol = 1e-6,
                save_everystep = true,
@@ -1374,7 +1389,7 @@ function train(net, p;
                maxtime_optim = 2*60,
                result = :dict,
                losstype = MSE(), # anything else than MSE() is not tested
-               minloss = 2e-32*n_samples(net),
+               minloss = 2e-32,
                use_component_arrays = false,
                n_samples_trajectory = 100,
                include = nothing,
@@ -1384,7 +1399,6 @@ function train(net, p;
     )
     checkparams(net, p)
     dx = gradient(net, p)
-    gnorminf = maximum(abs, dx)
     _, g!, h!, fgh!, fg! = get_functions(net, maxnorm;
                                          hessian_template = hessian_template,
                                          patience,
@@ -1398,15 +1412,16 @@ function train(net, p;
                                          verbosity)
     lossfunc = u -> MLPGradientFlow.loss(net, u; losstype, weights)
     if isnothing(optim_options)
-        optim_options = Optim.Options(iterations = maxiterations_optim,
-                                       time_limit = maxtime_optim,
-                                       f_abstol = -eps(),
-                                       f_reltol = -eps(),
-                                       x_abstol = -eps(),
-                                       x_reltol = -eps(),
+        optim_options = Optim.Options(iterations = typemax(Int),
+                                       time_limit = Inf,
+                                       f_abstol = NaN,
+                                       f_reltol = NaN,
+                                       x_abstol = NaN,
+                                       x_reltol = NaN,
                                        allow_f_increases = false,
-                                       g_abstol = g_tol,
-                                       callback = _ -> converged(fgh!.h.g.l.o)
+                                       g_abstol = NaN,
+                                       callback = Terminator(; o = g!.l.o,
+                                                               maxtime = float(maxtime_optim), maxiter = maxiterations_optim, minloss, min_gnorm)
                                       )
     end
     x = copy(p)
@@ -1455,10 +1470,11 @@ function train(net, p;
             odef = ODEFunction(swapsign(g!), jac = swapsign(h!))
             x0 = use_component_arrays ? x : Array(x)
             prob = ODEProblem(odef, x0, (0., Float64(maxT)), (; net,))
-            termin = terminator(g!.l.o; maxtime = maxtime_ode,
-                                  maxiter = maxiterations_ode,
-#                                   minloss = minloss,
-                                  losstype)
+            termin = DiscreteCallback(Terminator(; o = g!.l.o,
+                                                   maxtime = float(maxtime_ode),
+                                                   maxiter = maxiterations_ode,
+                                                   minloss, min_gnorm),
+                                      terminate!)
             sol = solve(prob, alg; dense, save_everystep, abstol, reltol,
                                 callback = termin, maxiters = maxiterations_ode,
                                 (dt === nothing ? NamedTuple() : (;dt=dt))...)
@@ -1482,13 +1498,13 @@ function train(net, p;
                 @info "Reached maxT = $maxT."
             end
             ode_time_run = time() - termin.condition.t0[]
-            ode_loss = lossfunc(sol.u[end])
             ode_iterations = termin.condition.i[]
             if save_everystep
                 trajectory = [(t, copy(x .= sol(t)))
                               for t in max.(sol.t[1], min.(sol.t[end], 10.0.^range(log10(sol.t[1]+1), log10(sol.t[end]+1), n_samples_trajectory) .- 1))]
             end
-            x .= sol.u[end]
+            ode_loss = g!.l.o.bestl / n_samples(net)
+            x .= g!.l.o.bestx
             ode_x = copy(x)
         end
     else
@@ -1509,6 +1525,7 @@ function train(net, p;
             @info "Starting optimizer $optim_solver."
         end
         if isa(optim_solver, Symbol) # NLopt
+            @warn "NLopt integration is not well tested; use Optim, if possible."
             opt = Opt(optim_solver, length(x))
             opt.min_objective = fg!
             opt.maxtime = maxtime_optim
@@ -1542,23 +1559,7 @@ function train(net, p;
 #             x = res.minimizer
             optim_time_run = res.time_run
             optim_iterations = res.iterations
-            optim_stopped_by = if converged(g!.l.o)
-                "patience"
-            elseif optim_time_run ≥ maxtime_optim
-                "maxtime"
-            elseif Optim.iteration_limit_reached(res)
-                "maxeval"
-            elseif Optim.f_converged(res)
-                "minloss"
-            elseif Optim.g_converged(res)
-                "mingradnorm"
-            elseif Optim.converged(res)
-                "converged"
-            elseif Optim.f_increased(res) && !Optim.iteration_limit_reached(res)
-                "objective increased between iterations"
-            else
-                "unkown reason"
-            end
+            optim_stopped_by = optim_options.callback.stopped_by
         end
         if !isnothing(trajectory) && save_everystep
             push!(trajectory, (trajectory[end][1] + 1, copy(g!.l.o.bestx)))
@@ -1570,7 +1571,7 @@ function train(net, p;
     end
     x = g!.l.o.bestx
     gradient!(G, net, x, weights = g!.l.o.weights) # recompute gradient
-    N = isa(net, Net) ? size(net.input, 2) : 1.
+    N = n_samples(net)
     gnorm = maximum(abs, G) / N
     g!(G, x) # recompute with regularized loss
     gnorm_regularized = maximum(abs, invscale!(G, tauinv)) / N

@@ -78,7 +78,7 @@ Create from `net` a network with input points and weights obtained from [`Normal
 
 ### Example
 ```
-julia> net = gauss_hermite_net(x -> x[1, :] .^ 2,
+julia> net = gauss_hermite_net(x -> reshape(x[1, :] .^ 2, 1, :),
                                Net(layers = ((5, softplus, false),
                                              (1, identity, true)), Din = 2))
 ```

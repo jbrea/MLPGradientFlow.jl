@@ -36,6 +36,7 @@ MLPGradientFlow.subspace_minloss
 MLPGradientFlow.grow_net
 MLPGradientFlow.shrink_net
 MLPGradientFlow.split_neuron
+MLPGradientFlow.cosine_similarity
 ```
 
 ## Saving

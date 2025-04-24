@@ -313,6 +313,7 @@ struct NetI{T,TE,S,G1,G2,TB1,TB2,TBT1,TBT2}
     dg0::Matrix{T}
     loss_correction_t2::T
 end
+(n::NetI)(p, input) = n.student(p, input)
 input_dim(net::NetI) = size(net.w1t, 2)
 function Base.show(io::IO, net::NetI)
     println(io, "Network with $(input_dim(net))D gaussian input")
