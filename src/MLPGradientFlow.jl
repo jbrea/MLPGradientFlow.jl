@@ -1242,7 +1242,7 @@ function (g::Grad)(dx, x; nx = weightnorm(x), forward = true, kwargs...)
             o.bestx .= x
             _dx = if o.net !== o.net_eval
                 _dx = copy(dx)
-                gradient!(_dx, o.net_eval, x; forward = false, nx, maxnorm = o.maxnorm, merge = o.merge, weigths = o.weights, kwargs...)
+                gradient!(_dx, o.net_eval, x; forward = false, nx, maxnorm = o.maxnorm, merge = o.merge, weights = o.weights, kwargs...)
             else
                 dx
             end
