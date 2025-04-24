@@ -1234,7 +1234,7 @@ function (g::Grad)(dx, x; nx = weightnorm(x), forward = true, kwargs...)
     o = g.l.o
     step!(o.net, o.batcher)
     gradient!(dx, o.net, x; forward, nx, maxnorm = o.maxnorm, merge = o.merge, weights = o.weights, kwargs...)
-    if forward == true && start_of_epoch(o.batcher)
+    if start_of_epoch(o.batcher)
         loss = g.l(x; nx, forward = o.net !== o.net_eval)
         if loss < o.bestl
             o.k_last_best = o.fk
