@@ -284,6 +284,299 @@ function integrate(::∂r₂∂b₁ϕϕ, w, _x, f1::typeof(sigmoid2), r1, b1,
     4*∂r₂∂b₁ϕϕBvN(r1, b1, r2, b2, u)
 end
 
+function integrate(::ϕ, w, _x, ::typeof(relu), r, b)
+    abs(r)*normal_pdf(b/r) + b * normal_cdf(b/abs(r))
+end
+function integrate(::∂rϕ, w, _x, ::typeof(relu), r, b)
+    sign(r) * normal_pdf(-b/r)
+end
+function integrate(::∂bϕ, w, _x, ::typeof(relu), r, b)
+    normal_cdf(b/abs(r))
+end
+function integrate(::∂r∂rϕ, w, _x, ::typeof(relu), r, b)
+    sign(r) * b^2/r^3 * normal_pdf(-b/r)
+end
+function integrate(::∂r∂bϕ, w, _x, ::typeof(relu), r, b)
+    - sign(r) * b/r^2 * normal_pdf(-b/r)
+end
+function integrate(::∂b∂bϕ, w, _x, ::typeof(relu), r, b)
+    normal_pdf(-b/r)/abs(r)
+end
+function integrate(::ϕϕ, w, _x, ::typeof(relu), r, b)
+    Z = normal_cdf(b/abs(r))
+    N = normal_pdf(b/r)
+    Z * (r^2 + b^2) + N * abs(r) * b
+end
+function integrate(::∂rϕϕ, w, _x, ::typeof(relu), r, b)
+    2 * r * normal_cdf(b/abs(r))
+end
+function integrate(::∂bϕϕ, w, _x, ::typeof(relu), r, b)
+    Z = normal_cdf(b/abs(r))
+    N = normal_pdf(b/r)
+    2 * b * Z + 2 * N * abs(r)
+end
+function integrate(::∂r∂rϕϕ, w, _x, ::typeof(relu), r, b)
+    2 * normal_cdf(b/abs(r)) - 2 * b/abs(r) * normal_pdf(b/r)
+end
+function integrate(::∂r∂bϕϕ, w, _x, ::typeof(relu), r, b)
+    2 * sign(r) * normal_pdf(b/abs(r))
+end
+function integrate(::∂b∂bϕϕ, w, _x, ::typeof(relu), r, b)
+    2 * normal_cdf(b/abs(r))
+end
+function integrate(::ϕϕ, w, _x, ::typeof(relu), r1, b1,
+                                ::typeof(relu), r2, b2,
+                                u, u′ = sqrt(1 - u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    s*r1*r2* (u′/(2π) * exp(-(_b1^2 - 2u*_b1*_b2 + _b2^2)/(2u′^2)) +
+            (_b1*_b2 + u) * BvN(_b1, _b2, u) +
+            _b1 * normal_pdf(_b2) * normal_cdf((_b1 - _b2 * u)/u′) +
+            _b2 * normal_pdf(_b1) * normal_cdf((_b2 - _b1 * u)/u′))
+end
+function ∂b₁T₁(b1, b2, u, u′)
+    A = u′/(2π)
+    B = -(b1^2 - 2u*b1*b2 + b2^2)/(2u′^2)
+    - A * exp(B) * (b1 - u*b2) / (u′^2)
+end
+function ∂b₂T₁(b1, b2, u, u′)
+    A = u′/(2π)
+    B = -(b1^2 - 2u*b1*b2 + b2^2)/(2u′^2)
+    - A * exp(B) * (b2 - u*b1) / (u′^2)
+end
+function ∂b₁∂b₁T₁(b1, b2, u, u′)
+    A = u′/(2π)
+    B = -(b1^2 - 2u*b1*b2 + b2^2)/(2u′^2)
+    (((b1 - u*b2) / (u′^2))^2 - 1/u′^2) * A * exp(B)
+end
+function ∂b₂∂b₁T₁(b1, b2, u, u′)
+    A = u′/(2π)
+    B = -(b1^2 - 2u*b1*b2 + b2^2)/(2u′^2)
+    A * exp(B) * ((b1 - u*b2) * (b2 - u * b1)/ (u′^4) + u/u′^2)
+end
+function ∂b₁∂uT₁(b1, b2, u, u′)
+    A = u′/(2π)
+    B = -(b1^2 - 2u*b1*b2 + b2^2)/(2u′^2)
+    -(b1 - u*b2) / (u′^2) * ∂uT₁(b1, b2, u, u′) + A * exp(B) * (b2/u′^2 - u * 2*(b1 - u*b2) / (u′^4))
+end
+function ∂uT₁(b1, b2, u, u′)
+    A = u′/(2π)
+    B = -(b1^2 - 2u*b1*b2 + b2^2)/(2u′^2)
+    A * exp(B) * (-u + b1*b2 + 2 * B * u) / u′^2
+end
+function ∂u∂uT₁(b1, b2, u, u′)
+    A = u′/(2π)
+    B = -(b1^2 - 2u*b1*b2 + b2^2)/(2u′^2)
+    C = (-u + b1*b2 + 2 * B * u)
+    A * exp(B) * ((C / u′^2)^2 + (-1 + 2*B + 2*u*(b1*b2 + 2 * B * u)/u′^2)/u′^2 + 2 * u * C/u′^4)
+end
+function ∂b₁T₂(b1, b2, u, u′)
+    b2 * BvN(b1, b2, u) + (b1 * b2 + u) * ∂hBvN(b1, b2, u)
+end
+function ∂b₂T₂(b1, b2, u, u′)
+    b1 * BvN(b1, b2, u) + (b1 * b2 + u) * ∂kBvN(b1, b2, u)
+end
+function ∂b₁∂b₁T₂(b1, b2, u, u′)
+    2 * b2 * ∂hBvN(b1, b2, u) + (b1 * b2 + u) * ∂h∂hBvN(b1, b2, u)
+end
+function ∂b₂∂b₁T₂(b1, b2, u, u′)
+    BvN(b1, b2, u) + b2 * ∂kBvN(b1, b2, u) + (b1 * b2 + u) * ∂k∂hBvN(b1, b2, u) + b1 * ∂hBvN(b1, b2, u)
+end
+function ∂b₁∂uT₂(b1, b2, u, u′)
+    b2 * ∂rBvN(b1, b2, u) + ∂hBvN(b1, b2, u) + (b1 * b2 + u) * ∂h∂rBvN(b1, b2, u)
+end
+function ∂uT₂(b1, b2, u, u′)
+    BvN(b1, b2, u) + (b1 * b2 + u) * ∂rBvN(b1, b2, u)
+end
+function ∂u∂uT₂(b1, b2, u, u′)
+    ∂rBvN(b1, b2, u) + (b1 * b2 + u) * ∂r∂rBvN(b1, b2, u) + ∂rBvN(b1, b2, u)
+end
+function ∂b₁T₃(b1, b2, u, u′)
+    arg1 = (b1 - b2 * u)/u′
+    ncdf1 = normal_cdf(arg1)
+    npdf1 = normal_pdf(arg1)
+    arg2 = (b2 - b1 * u)/u′
+    ncdf2 = normal_cdf(arg2)
+    npdf2 = normal_pdf(arg2)
+    normal_pdf(b2) * (ncdf1 + b1/u′ * npdf1) - b2 * normal_pdf(b1) * (b1 * ncdf2 + u/u′ * npdf2)
+end
+function ∂b₂T₃(b1, b2, u, u′)
+    arg1 = (b1 - b2 * u)/u′
+    ncdf1 = normal_cdf(arg1)
+    npdf1 = normal_pdf(arg1)
+    arg2 = (b2 - b1 * u)/u′
+    ncdf2 = normal_cdf(arg2)
+    npdf2 = normal_pdf(arg2)
+    normal_pdf(b1) * (ncdf2 + b2/u′ * npdf2) - b1 * normal_pdf(b2) * (b2 * ncdf1 + u/u′ * npdf1)
+end
+function ∂b₁∂b₁T₃(b1, b2, u, u′)
+    arg1 = (b1 - b2 * u)/u′
+    ncdf1 = normal_cdf(arg1)
+    npdf1 = normal_pdf(arg1)
+    arg2 = (b2 - b1 * u)/u′
+    ncdf2 = normal_cdf(arg2)
+    npdf2 = normal_pdf(arg2)
+    normal_pdf(b2) * (npdf1 + npdf1 - b1 * arg1/u′ * npdf1)/u′ - b2 * normal_pdf(b1) * (-b1 * (b1 * ncdf2 + u/u′ * npdf2) + ncdf2 - u/u′ * b1 * npdf2 + (u/u′)^2 * arg2 * npdf2)
+end
+function ∂b₂∂b₁T₃(b1, b2, u, u′)
+    arg1 = (b1 - b2 * u)/u′
+    ncdf1 = normal_cdf(arg1)
+    npdf1 = normal_pdf(arg1)
+    arg2 = (b2 - b1 * u)/u′
+    ncdf2 = normal_cdf(arg2)
+    npdf2 = normal_pdf(arg2)
+    normal_pdf(b2) * (-b2*(ncdf1 + b1/u′ * npdf1) - u/u′ * npdf1 + arg1 * npdf1 * u/u′^2 * b1) -
+    normal_pdf(b1) * ((b1 * ncdf2 + u/u′ * npdf2) + b2 * (b1/u′ * npdf2 - arg2 * u/u′^2 * npdf2))
+end
+function ∂b₁∂uT₃(b1, b2, u, u′)
+    arg1 = (b1 - b2 * u)/u′
+    darg1_du = -b2/u′ + (b1 - b2 * u) * u/u′^3
+    npdf1 = normal_pdf(arg1)
+    arg2 = (b2 - b1 * u)/u′
+    darg2_du = - b1/u′ + (b2 - b1 * u) * u/u′^3
+    npdf2 = normal_pdf(arg2)
+    normal_pdf(b2) * (npdf1 * darg1_du + b1 * u/u′^3 * npdf1 - b1/u′ * arg1 * darg1_du * npdf1) - b2 * normal_pdf(b1) * (b1 * npdf2 * darg2_du + (1/u′ + u^2/u′^3) * npdf2 - u/u′ * arg2 * darg2_du * npdf2)
+end
+function ∂uT₃(b1, b2, u, u′)
+    (-b2/u′ + u * (b1 - b2 * u)/u′^3) * b1 * normal_pdf(b2) * normal_pdf((b1 - b2 * u)/u′) +
+    (-b1/u′ + u * (b2 - b1 * u)/u′^3) * b2 * normal_pdf(b1) * normal_pdf((b2 - b1 * u)/u′)
+end
+function ∂u∂uT₃(b1, b2, u, u′)
+    arg1 = (b1 - b2 * u)/u′
+    darg1_du = -b2/u′ + (b1 - b2 * u) * u/u′^3
+    npdf1 = normal_pdf(arg1)
+    arg2 = (b2 - b1 * u)/u′
+    darg2_du = - b1/u′ + (b2 - b1 * u) * u/u′^3
+    npdf2 = normal_pdf(arg2)
+    (-b2*u/u′^3 + (b1 - b2 * u)/u′^3 - u*b2/u′^3 + 3 * u^2 * (b1 - b2 * u)/u′^5) * b1 * normal_pdf(b2) * npdf1 +
+    (-b1*u/u′^3 + (b2 - b1 * u)/u′^3 - u*b1/u′^3 + 3 * u^2 * (b2 - b1 * u)/u′^5) * b2 * normal_pdf(b1) * npdf2 -
+    (-b2/u′ + u * (b1 - b2 * u)/u′^3) * b1 * normal_pdf(b2) * arg1 * darg1_du * npdf1 -
+    (-b1/u′ + u * (b2 - b1 * u)/u′^3) * b2 * normal_pdf(b1) * arg2 * darg2_du * npdf2
+end
+function integrate(::∂r₁ϕϕ, w, _x, ::typeof(relu), r1, b1,
+                                ::typeof(relu), r2, b2,
+                                u, u′ = sqrt(1 - u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    s * r2 * (u′/(2π) * exp(-(_b1^2 - 2u*_b1*_b2 + _b2^2)/(2u′^2)) +
+            (_b1*_b2 + u) * BvN(_b1, _b2, u) +
+            _b1 * normal_pdf(_b2) * normal_cdf((_b1 - _b2 * u)/u′) +
+            _b2 * normal_pdf(_b1) * normal_cdf((_b2 - _b1 * u)/u′)) -
+    s * r2 * _b1 * (∂b₁T₁(_b1, _b2, u, u′) + ∂b₁T₂(_b1, _b2, u, u′) + ∂b₁T₃(_b1, _b2, u, u′))
+end
+function integrate(::∂b₁ϕϕ, w, _x, ::typeof(relu), r1, b1,
+                                ::typeof(relu), r2, b2,
+                                u, u′ = sqrt(1 - u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    sign(r2) * r2 * (∂b₁T₁(_b1, _b2, u, u′) + ∂b₁T₂(_b1, _b2, u, u′) + ∂b₁T₃(_b1, _b2, u, u′))
+end
+function integrate(::∂uϕϕ, w, _x, ::typeof(relu), r1, b1,
+                                ::typeof(relu), r2, b2,
+                                u, u′ = sqrt(1 - u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    r1 * r2 * (∂uT₁(_b1, _b2, u, u′) + ∂uT₂(_b1, _b2, u, u′) + ∂uT₃(_b1, _b2, u, u′))
+end
+function integrate(::∂r₁∂uϕϕ, w, _x, f1::typeof(relu), r1, b1,
+                                   f2::typeof(relu), r2, b2,
+                                   u, u′ = sqrt(1-u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    r2 * (∂uT₁(_b1, _b2, u, u′) + ∂uT₂(_b1, _b2, u, u′) + ∂uT₃(_b1, _b2, u, u′)) -
+    r2 * _b1 * (∂b₁∂uT₁(_b1, _b2, u, u′) + ∂b₁∂uT₂(_b1, _b2, u, u′) + ∂b₁∂uT₃(_b1, _b2, u, u′))
+end
+function integrate(::∂u∂uϕϕ, w, _x, f1::typeof(relu), r1, b1,
+                                  f2::typeof(relu), r2, b2,
+                                  u, u′ = sqrt(1-u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    s * r1 * r2 * (∂u∂uT₁(_b1, _b2, u, u′) + ∂u∂uT₂(_b1, _b2, u, u′) + ∂u∂uT₃(_b1, _b2, u, u′))
+end
+function integrate(::∂b₁∂uϕϕ, w, _x, f1::typeof(relu), r1, b1,
+                                  f2::typeof(relu), r2, b2,
+                                  u, u′ = sqrt(1-u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    sign(r1) * r2 * (∂b₁∂uT₁(_b1, _b2, u, u′) + ∂b₁∂uT₂(_b1, _b2, u, u′) + ∂b₁∂uT₃(_b1, _b2, u, u′))
+end
+function integrate(::∂b₁∂b₁ϕϕ, w, _x, f1::typeof(relu), r1, b1,
+                                  f2::typeof(relu), r2, b2,
+                                u, u′ = sqrt(1 - u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    s * r2/r1 * (∂b₁∂b₁T₁(_b1, _b2, u, u′) + ∂b₁∂b₁T₂(_b1, _b2, u, u′) + ∂b₁∂b₁T₃(_b1, _b2, u, u′))
+end
+function integrate(::∂b₁∂b₂ϕϕ, w, _x, f1::typeof(relu), r1, b1,
+                                  f2::typeof(relu), r2, b2,
+                                  u, u′ = sqrt(1-u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    (∂b₂∂b₁T₁(_b1, _b2, u, u′) + ∂b₂∂b₁T₂(_b1, _b2, u, u′) + ∂b₂∂b₁T₃(_b1, _b2, u, u′))
+end
+function integrate(::∂r₁∂b₁ϕϕ, w, _x, f1::typeof(relu), r1, b1,
+                                   f2::typeof(relu), r2, b2,
+                                   u, u′ = sqrt(1-u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    s * (-r2 * b1/r1^2 * (∂b₁∂b₁T₁(_b1, _b2, u, u′) + ∂b₁∂b₁T₂(_b1, _b2, u, u′) + ∂b₁∂b₁T₃(_b1, _b2, u, u′)))
+end
+function integrate(::∂r₁∂r₁ϕϕ, w, _x, f1::typeof(relu), r1, b1,
+                                   f2::typeof(relu), r2, b2,
+                                   u, u′ = sqrt(1 - u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    s * (r2 * _b1^2/r1 * (∂b₁∂b₁T₁(_b1, _b2, u, u′) + ∂b₁∂b₁T₂(_b1, _b2, u, u′) + ∂b₁∂b₁T₃(_b1, _b2, u, u′)))
+end
+function integrate(::∂r₁∂r₂ϕϕ, w, _x, f1::typeof(relu), r1, b1,
+                                   f2::typeof(relu), r2, b2,
+                                   u, u′ = sqrt(1 - u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    s * ((u′/(2π) * exp(-(_b1^2 - 2u*_b1*_b2 + _b2^2)/(2u′^2)) +
+            (_b1*_b2 + u) * BvN(_b1, _b2, u) +
+            _b1 * normal_pdf(_b2) * normal_cdf((_b1 - _b2 * u)/u′) +
+            _b2 * normal_pdf(_b1) * normal_cdf((_b2 - _b1 * u)/u′)) -
+    _b1 * (∂b₁T₁(_b1, _b2, u, u′) + ∂b₁T₂(_b1, _b2, u, u′) + ∂b₁T₃(_b1, _b2, u, u′)) -
+    _b2 * (∂b₂T₁(_b1, _b2, u, u′) + ∂b₂T₂(_b1, _b2, u, u′) + ∂b₂T₃(_b1, _b2, u, u′)) +
+    _b2 * _b1 * (∂b₂∂b₁T₁(_b1, _b2, u, u′) + ∂b₂∂b₁T₂(_b1, _b2, u, u′) + ∂b₂∂b₁T₃(_b1, _b2, u, u′)))
+end
+function integrate(::∂r₂∂b₁ϕϕ, w, _x, f1::typeof(relu), r1, b1,
+                                   f2::typeof(relu), r2, b2,
+                                   u, u′ = sqrt(1-u^2))
+    _b1 = b1/abs(r1)
+    _b2 = b2/abs(r2)
+    s = sign(r1) * sign(r2)
+    u = s * u
+    sign(r2)*(∂b₁T₁(_b1, _b2, u, u′) + ∂b₁T₂(_b1, _b2, u, u′) + ∂b₁T₃(_b1, _b2, u, u′)) -
+    b2/r2 * (∂b₂∂b₁T₁(_b1, _b2, u, u′) + ∂b₂∂b₁T₂(_b1, _b2, u, u′) + ∂b₂∂b₁T₃(_b1, _b2, u, u′))
+end
+
+
 struct NetI{T,TE,S,G1,G2,TB1,TB2,TBT1,TBT2}
     teacher::TE
     student::S
@@ -802,3 +1095,73 @@ function _c2(w1, r1, w2, r2, u, dgru, k, j, l, m, n)
     end
     tmp
 end
+
+const AFUNC = Union{typeof(relu), typeof(normal_cdf), typeof(sigmoid2)}
+
+function integrate(::∂r₁ϕϕ, w, _x, f1::T, r1, b1,
+                                   f2::T, r2, b2,
+                                   u, u′ = sqrt(1 - u^2)) where T <: AFUNC
+    derivative(r -> integrate(ϕϕ(), w, _x, f1, r, b1, f2, r2, b2, u, u′),
+               r1)
+end
+function integrate(::∂b₁ϕϕ, w, _x, f1::T, r1, b1,
+                                   f2::T, r2, b2,
+                                   u, u′ = sqrt(1 - u^2)) where T <: AFUNC
+    derivative(b -> integrate(ϕϕ(), w, _x, f1, r1, b, f2, r2, b2, u, u′),
+               b1)
+end
+function integrate(::∂uϕϕ, w, _x, f1::T, r1, b1,
+                                   f2::T, r2, b2,
+                                   u, u′ = nothing) where T <: AFUNC
+    derivative(u -> integrate(ϕϕ(), w, _x, f1, r1, b1, f2, r2, b2, u, sqrt(1 - u^2)),
+               u)
+end
+
+function integrate(::∂r₁∂uϕϕ, w, _x, f1::T, r1, b1,
+                                   f2::T, r2, b2,
+                                   u, u′ = nothing) where T <: AFUNC
+    derivative(r -> derivative(u -> integrate(ϕϕ(), w, _x, f1, r, b1, f2, r2, b2, u, sqrt(1 - u^2)), u), r1)
+end
+
+function integrate(::∂u∂uϕϕ, w, _x, f1::T, r1, b1,
+                                  f2::T, r2, b2,
+                                  u, u′ = nothing) where T <: AFUNC
+    derivative(u0 -> derivative(u -> integrate(ϕϕ(), w, _x, f1, r1, b1, f2, r2, b2, u, sqrt(1 - u^2)), u0), u)
+end
+
+function integrate(::∂b₁∂uϕϕ, w, _x, f1::T, r1, b1,
+                                  f2::T, r2, b2,
+                                  u, u′ = sqrt(1 - u^2)) where T <: AFUNC
+    derivative(b -> derivative(u -> integrate(ϕϕ(), w, _x, f1, r1, b, f2, r2, b2, u, sqrt(1 - u^2)), u), r1)
+end
+
+function integrate(::∂b₁∂b₁ϕϕ, w, _x, f1::T, r1, b1,
+                                  f2::T, r2, b2,
+                                  u, u′ = sqrt(1 - u^2)) where T <: AFUNC
+    derivative(b0 -> derivative(b -> integrate(ϕϕ(), w, _x, f1, r1, b, f2, r2, b2, u, u′), b0), b1)
+end
+
+function integrate(::∂b₁∂b₂ϕϕ, w, _x, f1::T, r1, b1,
+                                  f2::T, r2, b2,
+                                  u, u′ = sqrt(1 - u^2)) where T <: AFUNC
+    derivative(b1 -> derivative(b2 -> integrate(ϕϕ(), w, _x, f1, r1, b1, f2, r2, b2, u, u′), b2), b1)
+end
+
+function integrate(::∂r₁∂b₁ϕϕ, w, _x, f1::T, r1, b1,
+                                   f2::T, r2, b2,
+                                   u, u′ = sqrt(1 - u^2)) where T <: AFUNC
+    derivative(r1 -> derivative(b1 -> integrate(ϕϕ(), w, _x, f1, r1, b1, f2, r2, b2, u, u′), b1), r1)
+end
+
+function integrate(::∂r₁∂r₁ϕϕ, w, _x, f1::T, r1, b1,
+                                   f2::T, r2, b2,
+                                   u, u′ = sqrt(1 - u^2)) where T <: AFUNC
+    derivative(r1 -> derivative(r1 -> integrate(ϕϕ(), w, _x, f1, r1, b1, f2, r2, b2, u, u′), r1), r1)
+end
+
+function integrate(::∂r₂∂b₁ϕϕ, w, _x, f1::T, r1, b1,
+                                   f2::T, r2, b2,
+                                   u, u′ = sqrt(1 - u^2)) where T <: AFUNC
+    derivative(_b1 -> derivative(_r2 -> integrate(ϕϕ(), w, _x, f1, r1, _b1, f2, _r2, b2, u, u′), r2), b1)
+end
+

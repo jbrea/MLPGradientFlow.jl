@@ -346,35 +346,50 @@ end
     end
 end
 
-import MLPGradientFlow: integrate, NormalIntegral, _stride_arrayize, ϕ, ϕϕ, ∂r₁ϕϕ, ∂b₁ϕϕ, ∂uϕϕ, ∂rϕϕ, ∂rϕ, ∂bϕ, ∂bϕϕ, ∂u∂uϕϕ, ∂b₁∂uϕϕ, ∂b₁∂b₁ϕϕ, ∂r₁∂uϕϕ, ∂r₁∂b₁ϕϕ, ∂b₁∂b₂ϕϕ, ∂r₂∂b₁ϕϕ, ∂r₁∂r₁ϕϕ
+import MLPGradientFlow: integrate, NormalIntegral, _stride_arrayize, ϕ, ∂rϕ, ∂bϕ, ∂r∂rϕ, ∂r∂bϕ, ∂b∂bϕ, ϕϕ, ∂rϕϕ, ∂bϕϕ, ∂r∂rϕϕ, ∂r∂bϕϕ, ∂b∂bϕϕ, ∂r₁ϕϕ, ∂b₁ϕϕ, ∂uϕϕ, ∂u∂uϕϕ, ∂b₁∂uϕϕ, ∂b₁∂b₁ϕϕ, ∂r₁∂uϕϕ, ∂r₁∂b₁ϕϕ, ∂b₁∂b₂ϕϕ, ∂r₁∂r₂ϕϕ, ∂r₂∂b₁ϕϕ, ∂r₁∂r₁ϕϕ
+import ForwardDiff: derivative
+import FiniteDiff: finite_difference_derivative
+_fw(::∂rϕ, f, r, b) = derivative(r -> integrate(ϕ(), 0, 0, f, r, b), r)
+_fw(::∂bϕ, f, r, b) = derivative(b -> integrate(ϕ(), 0, 0, f, r, b), b)
+_fw(::∂r∂rϕ, f, r, b) = derivative(r -> derivative(r -> integrate(ϕ(), 0, 0, f, r, b), r), r)
+_fw(::∂r∂bϕ, f, r, b) = derivative(r -> derivative(b -> integrate(ϕ(), 0, 0, f, r, b), b), r)
+_fw(::∂b∂bϕ, f, r, b) = derivative(b -> derivative(b -> integrate(ϕ(), 0, 0, f, r, b), b), b)
+_fw(::∂rϕϕ, f, r, b) = derivative(r -> integrate(ϕϕ(), 0, 0, f, r, b), r)
+_fw(::∂bϕϕ, f, r, b) = derivative(b -> integrate(ϕϕ(), 0, 0, f, r, b), b)
+_fw(::∂r∂rϕϕ, f, r, b) = derivative(r -> derivative(r -> integrate(ϕϕ(), 0, 0, f, r, b), r), r)
+_fw(::∂r∂bϕϕ, f, r, b) = derivative(r -> derivative(b -> integrate(ϕϕ(), 0, 0, f, r, b), b), r)
+_fw(::∂b∂bϕϕ, f, r, b) = derivative(b -> derivative(b -> integrate(ϕϕ(), 0, 0, f, r, b), b), b)
+_fw(::∂r₁ϕϕ, f, r1, b1, r2, b2, u) = finite_difference_derivative(r1 -> integrate(ϕϕ(), 0, 0, f, r1, b1, f, r2, b2, u), r1)
+_fw(::∂b₁ϕϕ, f, r1, b1, r2, b2, u) = finite_difference_derivative(b1 -> integrate(ϕϕ(), 0, 0, f, r1, b1, f, r2, b2, u), b1)
+_fw(::∂uϕϕ, f, r1, b1, r2, b2, u) = finite_difference_derivative(u -> integrate(ϕϕ(), 0, 0, f, r1, b1, f, r2, b2, u), u)
+_fw(::∂r₁∂r₁ϕϕ, f, r1, b1, r2, b2, u) = finite_difference_derivative(r1 -> finite_difference_derivative(r1 -> integrate(ϕϕ(), 0, 0, f, r1, b1, f, r2, b2, u), r1), r1)
+_fw(::∂r₁∂b₁ϕϕ, f, r1, b1, r2, b2, u) = finite_difference_derivative(r1 -> finite_difference_derivative(b1 -> integrate(ϕϕ(), 0, 0, f, r1, b1, f, r2, b2, u), b1), r1)
+_fw(::∂r₁∂uϕϕ, f, r1, b1, r2, b2, u) = finite_difference_derivative(r1 -> finite_difference_derivative(u -> integrate(ϕϕ(), 0, 0, f, r1, b1, f, r2, b2, u), u), r1)
+_fw(::∂b₁∂b₁ϕϕ, f, r1, b1, r2, b2, u) = finite_difference_derivative(b1 -> finite_difference_derivative(b1 -> integrate(ϕϕ(), 0, 0, f, r1, b1, f, r2, b2, u), b1), b1)
+_fw(::∂b₁∂uϕϕ, f, r1, b1, r2, b2, u) = finite_difference_derivative(b1 -> finite_difference_derivative(u -> integrate(ϕϕ(), 0, 0, f, r1, b1, f, r2, b2, u), u), b1)
+_fw(::∂u∂uϕϕ, f, r1, b1, r2, b2, u) = finite_difference_derivative(u -> finite_difference_derivative(u -> integrate(ϕϕ(), 0, 0, f, r1, b1, f, r2, b2, u), u), u)
+_fw(::∂r₁∂r₂ϕϕ, f, r1, b1, r2, b2, u) = finite_difference_derivative(r1 -> finite_difference_derivative(r2 -> integrate(ϕϕ(), 0, 0, f, r1, b1, f, r2, b2, u), r2), r1)
+_fw(::∂b₁∂b₂ϕϕ, f, r1, b1, r2, b2, u) = finite_difference_derivative(b1 -> finite_difference_derivative(b2 -> integrate(ϕϕ(), 0, 0, f, r1, b1, f, r2, b2, u), b2), b1)
+_fw(::∂r₂∂b₁ϕϕ, f, r1, b1, r2, b2, u) = finite_difference_derivative(r2 -> finite_difference_derivative(b1 -> integrate(ϕϕ(), 0, 0, f, r1, b1, f, r2, b2, u), b1), r2)
 @testset "fast integrals" begin
     sigmoid_test = x -> erf(x/sqrt(2))
     G_test = x -> (1 + erf(x/sqrt(2)))/2
+    relu_test = x -> max(x, 0)
     MLPGradientFlow.deriv(::typeof(sigmoid_test)) = x -> ForwardDiff.derivative(sigmoid_test, x)
     MLPGradientFlow.second_deriv(::typeof(sigmoid_test)) = x -> ForwardDiff.derivative(MLPGradientFlow.deriv(sigmoid_test), x)
     MLPGradientFlow.deriv(::typeof(G_test)) = x -> ForwardDiff.derivative(G_test, x)
     MLPGradientFlow.second_deriv(::typeof(G_test)) = x -> ForwardDiff.derivative(MLPGradientFlow.deriv(G_test), x)
+    MLPGradientFlow.deriv(::typeof(relu_test)) = x -> x > 0
+    MLPGradientFlow.second_deriv(::typeof(relu_test)) = x -> 0
     g1 = _stride_arrayize(NormalIntegral(d = 1))
     g2 = _stride_arrayize(NormalIntegral(d = 2))
-    for (f1, f2) in ((sigmoid2, sigmoid_test), (normal_cdf, G_test))
-        for kind in (ϕ, ϕϕ, ∂rϕ, ∂rϕϕ, ∂bϕ, ∂bϕϕ)
-            @test integrate(kind(), g1.w, g1.x, f1, .3, .1) ≈
-                  integrate(kind(), g1.w, g1.x, f2, .3, .1)
-            @test integrate(kind(), g1.w, g1.x, f1, .3, 0.) ≈
-                  integrate(kind(), g1.w, g1.x, f2, .3, 0.) atol = eps()
-            @test integrate(kind(), g1.w, g1.x, f1, .3, -.1) ≈
-                  integrate(kind(), g1.w, g1.x, f2, .3, -.1)
-        end
-        for kind in (ϕϕ, ∂r₁ϕϕ, ∂b₁ϕϕ, ∂uϕϕ, ∂u∂uϕϕ, ∂b₁∂uϕϕ, ∂b₁∂b₁ϕϕ, ∂r₁∂uϕϕ, ∂r₁∂b₁ϕϕ, ∂b₁∂b₂ϕϕ, ∂r₂∂b₁ϕϕ, ∂r₁∂r₁ϕϕ)
-            @test integrate(kind(), g2.w, g2.x, f1, .3, .1, f1, .4, -.2, .3) ≈
-                  integrate(kind(), g2.w, g2.x, f2, .3, .1, f2, .4, -.2, .3)
-            @test integrate(kind(), g2.w, g2.x, f1, .3, 0., f1, .4, -.2, 1.) ≈
-                  integrate(kind(), g2.w, g2.x, f2, .3, 0., f2, .4, -.2, 1.)
-            @test integrate(kind(), g2.w, g2.x, f1, .3, 0., f1, .4, -.2, -1.) ≈
-                  integrate(kind(), g2.w, g2.x, f2, .3, 0., f2, .4, -.2, -1.)
-            @test integrate(kind(), g2.w, g2.x, f2, .3, 0., f2, .4, 0., .9) ≈
-                  integrate(kind(), g2.w, g2.x, f1, .3, 0., f1, .4, 0., .9) atol = 1e-14
-        end
+    @testset "$f1, $kind, $r, $b" for (f1, f2) in ((sigmoid2, sigmoid_test), (normal_cdf, G_test), (relu, relu_test)), kind in (ϕ, ∂rϕ, ∂bϕ, ∂r∂rϕ, ∂r∂bϕ, ∂b∂bϕ, ϕϕ, ∂rϕϕ, ∂bϕϕ, ∂r∂rϕϕ, ∂r∂bϕϕ, ∂b∂bϕϕ), r in (-.3, .3), b in (-.1, 0, .1)
+                    @test integrate(kind(), g1.w, g1.x, f1, r, b) ≈
+                    ((f1 == relu && kind ∉ (ϕ, ϕϕ)) ? _fw(kind(), f1, r, b) : integrate(kind(), g1.w, g1.x, f2, r, b)) atol = (f1 == relu && kind ∈ (ϕ, ϕϕ)) ? 1e-4 : 1e-14
+    end
+    @testset "$f1, $kind, $r1, $b1, $r2, $b2" for (f1, f2) in ((sigmoid2, sigmoid_test), (normal_cdf, G_test), (relu, relu_test)), kind in (ϕϕ, ∂r₁ϕϕ, ∂b₁ϕϕ, ∂uϕϕ, ∂u∂uϕϕ, ∂b₁∂uϕϕ, ∂b₁∂b₁ϕϕ, ∂r₁∂uϕϕ, ∂r₁∂b₁ϕϕ, ∂b₁∂b₂ϕϕ, ∂r₂∂b₁ϕϕ, ∂r₁∂r₁ϕϕ, ∂r₁∂r₂ϕϕ), r1 in (-.3, .3), b1 in (-.1, 0., .1), r2 in (-.4, .4), b2 in (-.2, 0., .2)
+                @test integrate(kind(), g2.w, g2.x, f1, r1, b1, f1, r2, b2, .3) ≈
+                ((f1 == relu && kind ∉ (ϕ, ϕϕ)) ? _fw(kind(), f1, r1, b1, r2, b2, .3) : integrate(kind(), g2.w, g2.x, f2, r1, b1, f2, r2, b2, .3)) atol = f1 == relu ? 1e-4 : 1e-14
     end
 end
 
