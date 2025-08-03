@@ -1418,7 +1418,7 @@ function train(net, p;
                                        f_reltol = NaN,
                                        x_abstol = NaN,
                                        x_reltol = NaN,
-                                       allow_f_increases = false,
+                                       allow_f_increases = true,
                                        g_abstol = NaN,
                                        callback = Terminator(; o = g!.l.o,
                                                                maxtime = float(maxtime_optim), maxiter = maxiterations_optim, minloss, min_gnorm)
@@ -1573,7 +1573,8 @@ function train(net, p;
     gradient!(G, net, x, weights = g!.l.o.weights) # recompute gradient
     N = n_samples(net)
     gnorm = maximum(abs, G) / N
-    g!(G, x) # recompute with regularized loss
+    # recompute with regularized loss
+    gradient!(G, g!.l.o.net_eval, x; forward = true, maxnorm = g!.l.o.maxnorm, merge = g!.l.o.merge, weights = g!.l.o.weights)
     gnorm_regularized = maximum(abs, invscale!(G, tauinv)) / N
     loss = lossfunc(x)
     rawres = (; ode = sol, optim = res, ode_x, optim_state = g!.l.o,
