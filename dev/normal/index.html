@@ -31,15 +31,15 @@ loss(neti, p)</code></pre><pre class="documenter-example-output"><code class="no
   &quot;ode_iterations&quot;    =&gt; 72
   &quot;optim_time_run&quot;    =&gt; 0
   &quot;converged&quot;         =&gt; false
-  &quot;ode_time_run&quot;      =&gt; 0.274127
+  &quot;ode_time_run&quot;      =&gt; 0.289541
   &quot;loss&quot;              =&gt; 2.09956e-6
   &quot;input&quot;             =&gt; [0.917897 1.00922 … -0.417516 -2.29178; -1.90071 -0.31…
   &quot;trajectory&quot;        =&gt; OrderedDict(0.0=&gt;Dict(&quot;w1&quot;=&gt;[0.230235 -0.239929 0.0; -…
   &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[0.311832 -0.423128 0.000281602; 0.00874656…
-  &quot;total_time&quot;        =&gt; 23.9973
+  &quot;total_time&quot;        =&gt; 22.1576
   &quot;ode_loss&quot;          =&gt; 2.09956e-6
   &quot;layerspec&quot;         =&gt; ((4, &quot;sigmoid2&quot;, true), (1, &quot;identity&quot;, false))
-  &quot;gnorm_regularized&quot; =&gt; 3.30147e-6</code></pre><pre><code class="language-julia hljs">res_gh = train(net_gh, p, tauinv = 1/MLPGradientFlow.n_samples(net_gh), maxT = 10^4,
+  &quot;gnorm_regularized&quot; =&gt; 0.0165073</code></pre><pre><code class="language-julia hljs">res_gh = train(net_gh, p, tauinv = 1/MLPGradientFlow.n_samples(net_gh), maxT = 10^4,
                maxiterations_optim = 0, n_samples_trajectory = 1000)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{String, Any} with 20 entries:
   &quot;gnorm&quot;             =&gt; 3.80456e-6
   &quot;init&quot;              =&gt; Dict(&quot;w1&quot;=&gt;[0.230235 -0.239929 0.0; -0.0932419 0.13650…
@@ -52,15 +52,15 @@ loss(neti, p)</code></pre><pre class="documenter-example-output"><code class="no
   &quot;ode_iterations&quot;    =&gt; 71
   &quot;optim_time_run&quot;    =&gt; 0
   &quot;converged&quot;         =&gt; false
-  &quot;ode_time_run&quot;      =&gt; 0.810149
+  &quot;ode_time_run&quot;      =&gt; 0.818333
   &quot;loss&quot;              =&gt; 1.87845e-6
   &quot;input&quot;             =&gt; [-1.34629 -1.21804 … 1.21804 1.34629; -8.30898 -8.3089…
   &quot;trajectory&quot;        =&gt; OrderedDict(0.0=&gt;Dict(&quot;w1&quot;=&gt;[0.230235 -0.239929 0.0; -…
   &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[0.307694 -0.446489 -1.32774e-17; 0.0180284…
-  &quot;total_time&quot;        =&gt; 12.7442
+  &quot;total_time&quot;        =&gt; 12.1758
   &quot;ode_loss&quot;          =&gt; 1.87845e-6
   &quot;layerspec&quot;         =&gt; ((4, &quot;sigmoid2&quot;, true), (1, &quot;identity&quot;, false))
-  &quot;gnorm_regularized&quot; =&gt; 3.80456e-6</code></pre><pre><code class="language-julia hljs">resi = train(neti, p, maxT = 10^4,
+  &quot;gnorm_regularized&quot; =&gt; 0.0511637</code></pre><pre><code class="language-julia hljs">resi = train(neti, p, maxT = 10^4,
              maxiterations_optim = 0, n_samples_trajectory = 1000)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{String, Any} with 17 entries:
   &quot;gnorm&quot;             =&gt; 3.80456e-6
   &quot;init&quot;              =&gt; Dict(&quot;w1&quot;=&gt;[0.230235 -0.239929 0.0; -0.0932419 0.13650…
@@ -71,11 +71,11 @@ loss(neti, p)</code></pre><pre class="documenter-example-output"><code class="no
   &quot;ode_iterations&quot;    =&gt; 71
   &quot;optim_time_run&quot;    =&gt; 0
   &quot;converged&quot;         =&gt; false
-  &quot;ode_time_run&quot;      =&gt; 0.0573831
+  &quot;ode_time_run&quot;      =&gt; 0.057112
   &quot;loss&quot;              =&gt; 1.87845e-6
   &quot;trajectory&quot;        =&gt; OrderedDict(0.0=&gt;Dict(&quot;w1&quot;=&gt;[0.230235 -0.239929 0.0; -…
   &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[0.307694 -0.446489 -2.21731e-14; 0.0180284…
-  &quot;total_time&quot;        =&gt; 8.00681
+  &quot;total_time&quot;        =&gt; 7.58215
   &quot;ode_loss&quot;          =&gt; 1.87845e-6
   &quot;layerspec&quot;         =&gt; ((4, &quot;sigmoid2&quot;, true), (1, &quot;identity&quot;, false))
   &quot;gnorm_regularized&quot; =&gt; 3.80456e-6</code></pre><pre><code class="language-julia hljs">td1, tt1, _ = MLPGradientFlow.trajectory_distance(res_sample, resi)
@@ -91,4 +91,4 @@ lines!(ax, tt3, td3, label = &quot;sample vs. gauss-hermite&quot;)
 lines!(ax, tt2, td2, label = &quot;gauss-hermite vs. teacher-student&quot;)
 axislegend(ax, position = :lt)
 f</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr33"><span class="sgr1">┌ Warning: </span></span>reached end of reference
-<span class="sgr33"><span class="sgr1">└ </span></span><span class="sgr90">@ MLPGradientFlow ~/work/MLPGradientFlow.jl/MLPGradientFlow.jl/src/utils.jl:31</span></code></pre><p><img src="../trajectory_normal.png" alt/></p><p>The Gauss-Hermite approximation and the teacher-student network based on symbolic integration of Gaussian integrals give almost indistinguishable results, whereas gradient flow on a finite number of normally distributed samples leads to slight deviations from the infinite data setting.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../sgd/">« Comparison of Gradient Flow to SGD</a><a class="docs-footer-nextpage" href="../tauinv/">Separation of Timescales »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.10.1 on <span class="colophon-date" title="Thursday 24 April 2025 10:51">Thursday 24 April 2025</span>. Using Julia version 1.11.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+<span class="sgr33"><span class="sgr1">└ </span></span><span class="sgr90">@ MLPGradientFlow ~/work/MLPGradientFlow.jl/MLPGradientFlow.jl/src/utils.jl:31</span></code></pre><p><img src="../trajectory_normal.png" alt/></p><p>The Gauss-Hermite approximation and the teacher-student network based on symbolic integration of Gaussian integrals give almost indistinguishable results, whereas gradient flow on a finite number of normally distributed samples leads to slight deviations from the infinite data setting.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../sgd/">« Comparison of Gradient Flow to SGD</a><a class="docs-footer-nextpage" href="../tauinv/">Separation of Timescales »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Sunday 3 August 2025 11:13">Sunday 3 August 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

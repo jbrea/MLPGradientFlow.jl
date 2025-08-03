@@ -25,11 +25,11 @@ res_standard = train(neti, p; maxtime_ode = 10, maxiterations_optim = 0)</code><
   &quot;ode_iterations&quot;    =&gt; 2707
   &quot;optim_time_run&quot;    =&gt; 0
   &quot;converged&quot;         =&gt; false
-  &quot;ode_time_run&quot;      =&gt; 1.11796
+  &quot;ode_time_run&quot;      =&gt; 1.12251
   &quot;loss&quot;              =&gt; 2.27038e-6
   &quot;trajectory&quot;        =&gt; OrderedDict(0.0=&gt;Dict(&quot;w1&quot;=&gt;[0.13725 1.29647 0.0; -0.6…
   &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[-0.0933173 1.18814 0.226924; -0.425007 0.5…
-  &quot;total_time&quot;        =&gt; 7.54873
+  &quot;total_time&quot;        =&gt; 6.70828
   &quot;ode_loss&quot;          =&gt; 2.27038e-6
   &quot;layerspec&quot;         =&gt; ((4, &quot;sigmoid2&quot;, true), (1, &quot;identity&quot;, true))
   &quot;gnorm_regularized&quot; =&gt; 4.3992e-15</code></pre><pre><code class="language-julia hljs">tauinv = zero(p) .+ 1
@@ -37,20 +37,20 @@ tauinv.w1[:, end] .= 1e-4
 tauinv.w2[:, end] .= 1e-4
 
 res = train(neti, p; tauinv, maxtime_ode = 20, maxiterations_optim = 0)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{String, Any} with 17 entries:
-  &quot;gnorm&quot;             =&gt; 2.05535e-8
+  &quot;gnorm&quot;             =&gt; 7.22821e-9
   &quot;init&quot;              =&gt; Dict(&quot;w1&quot;=&gt;[0.13725 1.29647 0.0; -0.644227 0.487307 0.…
-  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[-0.264197 1.17991 0.180489; 0.0029536 -0.0…
+  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[-0.264197 1.17991 0.180489; 0.00295556 -0.…
   &quot;loss_curve&quot;        =&gt; [1.12621, 1.11164, 1.10364, 1.09962, 1.09768, 1.09668,…
   &quot;optim_iterations&quot;  =&gt; 0
   &quot;ode_stopped_by&quot;    =&gt; &quot;maxtime &gt; 20.0s&quot;
-  &quot;ode_iterations&quot;    =&gt; 53411
+  &quot;ode_iterations&quot;    =&gt; 52851
   &quot;optim_time_run&quot;    =&gt; 0
   &quot;converged&quot;         =&gt; false
-  &quot;ode_time_run&quot;      =&gt; 20.0002
+  &quot;ode_time_run&quot;      =&gt; 20.0003
   &quot;loss&quot;              =&gt; 0.000334693
   &quot;trajectory&quot;        =&gt; OrderedDict(0.0=&gt;Dict(&quot;w1&quot;=&gt;[0.13725 1.29647 0.0; -0.6…
-  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[-0.264197 1.17991 0.180489; 0.0029536 -0.0…
-  &quot;total_time&quot;        =&gt; 22.6005
+  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[-0.264197 1.17991 0.180489; 0.00295556 -0.…
+  &quot;total_time&quot;        =&gt; 22.4843
   &quot;ode_loss&quot;          =&gt; 0.000334693
   &quot;layerspec&quot;         =&gt; ((4, &quot;sigmoid2&quot;, true), (1, &quot;identity&quot;, true))
-  &quot;gnorm_regularized&quot; =&gt; 2.05535e-8</code></pre><p>We see that the two dynamics converge to different solutions.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../normal/">« Standard Normal Input</a><a class="docs-footer-nextpage" href="../python/">Usage from Python »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.10.1 on <span class="colophon-date" title="Thursday 24 April 2025 10:51">Thursday 24 April 2025</span>. Using Julia version 1.11.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+  &quot;gnorm_regularized&quot; =&gt; 7.22821e-5</code></pre><p>We see that the two dynamics converge to different solutions.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../normal/">« Standard Normal Input</a><a class="docs-footer-nextpage" href="../python/">Usage from Python »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Sunday 3 August 2025 11:13">Sunday 3 August 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
