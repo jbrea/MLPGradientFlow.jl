@@ -20,19 +20,19 @@ res = train(student, p,
   &quot;gnorm&quot;             =&gt; 1.99552e-12
   &quot;init&quot;              =&gt; Dict(&quot;w1&quot;=&gt;[-0.398123 0.531146; -0.550592 0.0325326; ……
   &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[1.58006 1.36655; -0.448955 -0.242849; … ; …
-  &quot;loss_curve&quot;        =&gt; [18.3373, 7.47465e-5, 1.16611e-7, 2.30342e-9, 5.30119e…
+  &quot;loss_curve&quot;        =&gt; [18.3373, 8.62024e-5, 1.51932e-7, 3.16209e-9, 1.1967e-…
   &quot;target&quot;            =&gt; [-2.8022 -2.71996 … -6.5585 -2.46518]
   &quot;optim_iterations&quot;  =&gt; 0
   &quot;ode_stopped_by&quot;    =&gt; &quot;maxtime &gt; 10.0s&quot;
-  &quot;ode_iterations&quot;    =&gt; 956
+  &quot;ode_iterations&quot;    =&gt; 934
   &quot;optim_time_run&quot;    =&gt; 0
   &quot;converged&quot;         =&gt; false
-  &quot;ode_time_run&quot;      =&gt; 10.0122
+  &quot;ode_time_run&quot;      =&gt; 10.0144
   &quot;loss&quot;              =&gt; 1.23711e-24
   &quot;input&quot;             =&gt; [-1.49619 -0.342379 … 0.569387 0.138405; -0.2845 0.075…
   &quot;trajectory&quot;        =&gt; OrderedDict(0.0=&gt;Dict(&quot;w1&quot;=&gt;[-0.398123 0.531146; -0.55…
   &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[1.58006 1.36655; -0.448955 -0.242849; … ; …
-  &quot;total_time&quot;        =&gt; 22.7075
+  &quot;total_time&quot;        =&gt; 23.4217
   &quot;ode_loss&quot;          =&gt; 1.23711e-24
   &quot;layerspec&quot;         =&gt; ((5, &quot;g&quot;, false), (1, &quot;identity&quot;, false))
   &quot;gnorm_regularized&quot; =&gt; 1.99552e-12</code></pre><p>Let us compare the solution found by the student to the teacher parameters:</p><pre><code class="language-julia hljs">p_res = params(res[&quot;x&quot;])
@@ -48,4 +48,4 @@ p_res.w1</code></pre><pre class="documenter-example-output"><code class="nohighl
  -0.404374  -1.80821
  -1.59789    0.358099</code></pre><pre><code class="language-julia hljs">p_res.w2</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1×5 reshape(view(::Vector{Float64}, 11:15), 1, 5) with eltype Float64:
  -1.35351  0.0760491  -0.661599  -0.502888  -0.103821</code></pre><pre><code class="language-julia hljs">teacher.p.w2</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1×5 reshape(view(::Vector{Float64}, 11:15), 1, 5) with eltype Float64:
- -0.502888  -1.35351  0.0760491  -0.103821  -0.661599</code></pre><p>We see that the student perfectly reproduces the teacher up to permutation of the hidden neurons.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../train/">« Training to convergence</a><a class="docs-footer-nextpage" href="../sgd/">Comparison of Gradient Flow to SGD »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Sunday 3 August 2025 11:13">Sunday 3 August 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+ -0.502888  -1.35351  0.0760491  -0.103821  -0.661599</code></pre><p>We see that the student perfectly reproduces the teacher up to permutation of the hidden neurons.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../train/">« Training to convergence</a><a class="docs-footer-nextpage" href="../sgd/">Comparison of Gradient Flow to SGD »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Monday 4 August 2025 08:31">Monday 4 August 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
