@@ -1,7 +1,7 @@
 There are two settings in which we can approximate gradient descent on the loss function integrated over an infinite amount of normally distributed input data, i.e.
 ``\mathbb E_x\left[(\mathrm{net}(p, x) - y)^2\right]``  with normally distributed ``x`` with mean 0 and standard deviation 1:
 1. When the input dimension is sufficiently small (`Din ≤ 2`) such that we can use Gauss-Hermite quadrature. This works for arbitrary teacher functions and networks.
-2. When we have a single hidden layer teacher and student network. This is particularly fast, when using `erf`-based activation functions, like `normal_cdf` or `sigmoid2` (see [Activation Functions](@ref)).
+2. When we have a single hidden layer teacher and student network. This is particularly fast, when using `relu` or `erf`-based activation functions, like `normal_cdf` or `sigmoid2` (see [Activation Functions](@ref)).
 We illustrate both cases in a 2D example.
 
 ```@example gaussian
