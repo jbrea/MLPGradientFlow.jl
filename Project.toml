@@ -1,7 +1,7 @@
 name = "MLPGradientFlow"
 uuid = "5710a1e5-60a8-4c70-afc1-f14619eff7f5"
-authors = ["Johanni Brea <jbrea@users.noreply.github.com>"]
 version = "0.2.0"
+authors = ["Johanni Brea <jbrea@users.noreply.github.com>"]
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
@@ -35,7 +35,7 @@ FastGaussQuadrature = "1.0.2"
 IfElse = "0.1"
 LoopVectorization = "0.12"
 NLopt = "0.6,1"
-Optim = "1.7"
+Optim = "1.7, 2"
 Optimisers = "0.4"
 OrderedCollections = "1"
 OrdinaryDiffEq = "6.18"
