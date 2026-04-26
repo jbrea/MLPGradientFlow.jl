@@ -14,70 +14,70 @@ net = Net(; layers = ((5, softplus, true),     # 5 relu neurons with biases
 p = random_params(net)
 
 result = train(net, p, maxtime_ode = 20., maxtime_optim = 20., n_samples_trajectory = 10^3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{String, Any} with 20 entries:
-  &quot;gnorm&quot;             =&gt; 8.79742e-6
+  &quot;gnorm&quot;             =&gt; 2.39703e-8
   &quot;init&quot;              =&gt; Dict(&quot;w1&quot;=&gt;[0.149272 -0.196412 0.0; -0.329254 0.715402…
-  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[242.884 612.835 -546.38; -821.118 806.167 …
+  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[252.146 636.02 -567.041; -858.327 842.652 …
   &quot;optim_stopped_by&quot;  =&gt; &quot;maxtime &gt; 20.0s&quot;
-  &quot;loss_curve&quot;        =&gt; [4.12157, 0.954066, 0.953855, 0.953702, 0.953579, 0.95…
+  &quot;loss_curve&quot;        =&gt; [4.12157, 0.954064, 0.953852, 0.953698, 0.953575, 0.95…
   &quot;target&quot;            =&gt; [0.911875 -0.792403 … -0.313917 -1.1881]
-  &quot;optim_iterations&quot;  =&gt; 34640
+  &quot;optim_iterations&quot;  =&gt; 34947
   &quot;ode_stopped_by&quot;    =&gt; &quot;maxtime &gt; 20.0s&quot;
-  &quot;ode_iterations&quot;    =&gt; 15382
-  &quot;optim_time_run&quot;    =&gt; 20.0004
+  &quot;ode_iterations&quot;    =&gt; 16871
+  &quot;optim_time_run&quot;    =&gt; 20.0003
   &quot;converged&quot;         =&gt; false
-  &quot;ode_time_run&quot;      =&gt; 20.0204
+  &quot;ode_time_run&quot;      =&gt; 20.0201
   &quot;loss&quot;              =&gt; 0.931382
   &quot;input&quot;             =&gt; [0.808288 -1.10464 … 0.723346 -0.0100866; -1.12207 -0.…
   &quot;trajectory&quot;        =&gt; OrderedDict(0.0=&gt;Dict(&quot;w1&quot;=&gt;[0.149272 -0.196412 0.0; -…
-  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[235.607 594.589 -530.117; -800.405 785.853…
-  &quot;total_time&quot;        =&gt; 60.5932
+  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[245.264 618.776 -551.676; -838.556 823.263…
+  &quot;total_time&quot;        =&gt; 59.5931
   &quot;ode_loss&quot;          =&gt; 0.931382
   &quot;layerspec&quot;         =&gt; ((5, &quot;softplus&quot;, true), (1, &quot;identity&quot;, true))
-  &quot;gnorm_regularized&quot; =&gt; 8.79742e-6</code></pre><p>We see that optimization has found a point with a very small gradient:</p><pre><code class="language-julia hljs">gradient(net, params(result[&quot;x&quot;]))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ComponentVector{Float64}(w1 = [-6.221534533623372e-10 -5.734069672027955e-10 -4.5378975621965373e-11; 4.196029652246446e-12 -1.0514724377650134e-12 1.8460726024690762e-9; … ; 7.741951956151337e-6 8.221868120719613e-7 -2.8451607185502325e-6; -3.859830905150047e-6 -4.1804378989197856e-7 1.4078681319631415e-6], w2 = [8.797418742044785e-6 3.1162279872273546e-6 … 7.718813481245656e-9 1.532493459155404e-8])</code></pre><p>Let us inspect the spectrum of the hessian:</p><pre><code class="language-julia hljs">hessian_spectrum(net, params(result[&quot;x&quot;]))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LinearAlgebra.Eigen{Float64, Float64, Matrix{Float64}, Vector{Float64}}
+  &quot;gnorm_regularized&quot; =&gt; 2.39703e-8</code></pre><p>We see that optimization has found a point with a very small gradient:</p><pre><code class="language-julia hljs">gradient(net, params(result[&quot;x&quot;]))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ComponentVector{Float64}(w1 = [1.173480178067645e-12 1.0918984301441356e-12 7.962423040838379e-10; -5.246818265207192e-15 1.826395888061377e-15 1.6734989277120203e-9; … ; -1.000832856591263e-8 -1.7981956386923054e-11 -4.821610843919189e-9; 4.997339413942714e-9 2.324610027057882e-11 2.404629810826009e-9], w2 = [3.856547597093741e-9 -2.397033253712685e-8 … -1.7311189834238658e-10 2.0885182916430266e-11])</code></pre><p>Let us inspect the spectrum of the hessian:</p><pre><code class="language-julia hljs">hessian_spectrum(net, params(result[&quot;x&quot;]))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LinearAlgebra.Eigen{Float64, Float64, Matrix{Float64}, Vector{Float64}}
 values:
 21-element Vector{Float64}:
-     -9.873528719091628e-11
-      1.7865162102358558e-12
-      1.9621218127395035e-12
-      4.222370642609299e-11
-      7.102431437038558e-8
-      1.8225676761662163e-7
-      2.7322461472335964e-7
-      2.4721314904027533e-6
-      0.000417635280033253
-      0.0026313009949316415
+     -6.875494995555491e-12
+      1.4303281740825434e-12
+      1.7006557850473327e-12
+      7.770670359022214e-11
+      6.4504268442825e-8
+      1.6473325145479574e-7
+      2.566299712206238e-7
+      2.35241573885e-6
+      0.00041766815336399457
+      0.0026317257760806534
       ⋮
-      0.49716028119381617
-      4.8534969841423905
-     17.873422940316
-     35.95428363322251
-  38015.098669753424
-  58752.1620221189
-  90025.58781998971
- 556178.1047873134
-      1.7153420042001235e6
+      0.49739838634448774
+      5.106590769141379
+     18.806590913135434
+     37.84681275846446
+  41541.72802692438
+  64981.09816668412
+  97319.6492602159
+ 615205.6855361774
+      1.8996839230585205e6
 vectors:
 21×21 Matrix{Float64}:
-  0.00345718    0.0301165    -0.283731     …   4.8362e-8     1.24292e-8
- -0.00064656   -0.465237     -0.0491494       -5.2088e-7    -3.66688e-7
-  4.35466e-6   -2.90498e-7   -2.17747e-6       0.0549524     0.346459
-  1.83666e-5   -5.0811e-7    -3.05398e-6      -0.101607     -0.685353
- -2.21266e-5   -2.52208e-7   -2.77984e-6       0.0466245     0.339428
-  0.00863322    0.0752638    -0.71135      …  -1.28331e-7   -2.17936e-8
-  0.000633463   0.456259      0.0483622        4.07282e-7    1.30966e-7
- -2.51377e-6   -1.63337e-7   -1.09812e-6      -0.382708      0.0490085
- -1.11491e-5   -1.16979e-8   -5.22308e-7       0.759578     -0.100419
-  1.32869e-5   -1.57377e-7   -7.06195e-7      -0.37741       0.0515272
-  ⋮                                        ⋱                 ⋮
-  2.60044e-7   -5.96702e-7   -2.54506e-6       0.032349     -0.207675
-  7.59232e-7   -5.93568e-7   -2.5858e-6       -0.0717174     0.410641
-  4.4782e-8    -5.6523e-7    -2.51691e-6       0.0394588    -0.203244
- -7.03624e-9   -6.14048e-8    5.78121e-7   …  -0.0542423    -0.00734597
-  9.08334e-10   5.54948e-7    5.84862e-8      -0.328528     -0.163662
- -0.014508      0.00311628    0.0167102        2.49736e-5   -0.000756795
- -0.699689      0.000264873  -0.0170025        4.65473e-5   -0.000736009
-  0.714197     -0.00338133    0.000284848      6.74254e-5   -0.000713105
-  0.0           0.0           5.66152e-7   …   0.000108257  -0.00053555</code></pre><p>The eigenvalues are all positive, indicating that we are in a local minimum.</p><pre><code class="language-julia hljs">using CairoMakie
+  0.005246     0.0305231   -0.283662    …   4.43849e-8    1.13536e-8
+ -0.049009    -0.46252     -0.0504264      -4.74017e-7   -3.33147e-7
+  4.61919e-6  -7.66223e-7  -1.98945e-6      0.0552657     0.346002
+  1.60461e-5  -2.15076e-6  -2.96157e-6     -0.102549     -0.685465
+ -2.00662e-5   1.84272e-6  -2.43546e-6      0.0472557     0.33997
+  0.0130839    0.0762796   -0.711158    …  -1.17036e-7   -1.98625e-8
+  0.0480605    0.453559     0.0496067       3.69875e-7    1.18833e-7
+ -2.71676e-6   1.3177e-7   -1.02559e-6     -0.38248       0.0491241
+ -9.71399e-6   9.96497e-7  -3.91743e-7      0.760199     -0.100709
+  1.2083e-5   -1.40558e-6  -7.27786e-7     -0.378233      0.0516959
+  ⋮                                     ⋱                 ⋮
+  2.73753e-7  -6.06601e-7  -2.34822e-6      0.0321808    -0.207422
+  6.21193e-7  -6.38878e-7  -2.39611e-6     -0.0713039     0.410752
+ -2.43328e-8  -5.45215e-7  -2.32777e-6      0.0392087    -0.203595
+ -9.91261e-9  -5.77616e-8   5.36481e-7  …  -0.0531253    -0.00719364
+  5.36016e-8   5.04911e-7   5.49201e-8     -0.326287     -0.162383
+  0.0108685    0.00185515   0.0182649       2.3433e-5    -0.000718629
+ -0.708469     0.074136    -0.0138226       4.347e-5     -0.000699336
+  0.6976      -0.0759912   -0.00444926      6.28341e-5   -0.000678178
+  0.0          0.0          5.26343e-7  …   0.000102876  -0.00050891</code></pre><p>The eigenvalues are all positive, indicating that we are in a local minimum.</p><pre><code class="language-julia hljs">using CairoMakie
 
 function plot_losscurve(result; kwargs...)
     f = Figure()
@@ -86,4 +86,4 @@ function plot_losscurve(result; kwargs...)
     f
 end
 
-plot_losscurve(result)</code></pre><p><img src="../loss_curve1.png" alt/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Overview</a><a class="docs-footer-nextpage" href="../teacherstudent/">Teacher student setup »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Thursday 9 October 2025 13:06">Thursday 9 October 2025</span>. Using Julia version 1.12.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+plot_losscurve(result)</code></pre><p><img src="../loss_curve1.png" alt/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Overview</a><a class="docs-footer-nextpage" href="../teacherstudent/">Teacher student setup »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Sunday 26 April 2026 15:15">Sunday 26 April 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
