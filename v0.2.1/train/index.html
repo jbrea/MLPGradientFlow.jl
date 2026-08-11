@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Training to convergence · MLPGradientFlow.jl</title><meta name="title" content="Training to convergence · MLPGradientFlow.jl"/><meta property="og:title" content="Training to convergence · MLPGradientFlow.jl"/><meta property="twitter:title" content="Training to convergence · MLPGradientFlow.jl"/><meta name="description" content="Documentation for MLPGradientFlow.jl."/><meta property="og:description" content="Documentation for MLPGradientFlow.jl."/><meta property="twitter:description" content="Documentation for MLPGradientFlow.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">MLPGradientFlow.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Overview</a></li><li><span class="tocitem">Examples</span><ul><li class="is-active"><a class="tocitem" href>Training to convergence</a></li><li><a class="tocitem" href="../teacherstudent/">Teacher student setup</a></li><li><a class="tocitem" href="../sgd/">Comparison of Gradient Flow to SGD</a></li><li><a class="tocitem" href="../normal/">Standard Normal Input</a></li><li><a class="tocitem" href="../tauinv/">Separation of Timescales</a></li></ul></li><li><a class="tocitem" href="../python/">Usage from Python</a></li><li><a class="tocitem" href="../activations/">Activation Functions</a></li><li><a class="tocitem" href="../docstrings/">Docstrings</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Training to convergence</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Training to convergence</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/jbrea/MLPGradientFlow.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/jbrea/MLPGradientFlow.jl/blob/main/docs/src/train.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><p>In the following example, we train a network with one hidden layer of 5 softplus neurons on random in- and output.</p><pre><code class="language-julia hljs">using MLPGradientFlow, Random
+
+Random.seed!(123)
+
+input = randn(2, 1_000)  # 2-dimensional random input
+target = randn(1, 1_000) # 1-dimensional random output
+
+net = Net(; layers = ((5, softplus, true),     # 5 relu neurons with biases
+                      (1, identity, true)), # 1 identity neuron with bias
+            input,
+            target)
+
+p = random_params(net)
+
+result = train(net, p, maxtime_ode = 20., maxtime_optim = 20., n_samples_trajectory = 10^3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{String, Any} with 20 entries:
+  &quot;gnorm&quot;             =&gt; 0.00159372
+  &quot;init&quot;              =&gt; Dict(&quot;w1&quot;=&gt;[0.149272 -0.196412 0.0; -0.329254 0.715402…
+  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[396.053 996.635 -888.353; -1405.41 1378.96…
+  &quot;optim_stopped_by&quot;  =&gt; &quot;maxtime &gt; 20.0s&quot;
+  &quot;loss_curve&quot;        =&gt; [4.12157, 0.954065, 0.953854, 0.9537, 0.953578, 0.9534…
+  &quot;target&quot;            =&gt; [0.911875 -0.792403 … -0.313917 -1.1881]
+  &quot;optim_iterations&quot;  =&gt; 37316
+  &quot;ode_stopped_by&quot;    =&gt; &quot;maxtime &gt; 20.0s&quot;
+  &quot;ode_iterations&quot;    =&gt; 15837
+  &quot;optim_time_run&quot;    =&gt; 20.0008
+  &quot;converged&quot;         =&gt; false
+  &quot;ode_time_run&quot;      =&gt; 20.0204
+  &quot;loss&quot;              =&gt; 0.93138
+  &quot;input&quot;             =&gt; [0.808288 -1.10464 … 0.723346 -0.0100866; -1.12207 -0.…
+  &quot;trajectory&quot;        =&gt; OrderedDict(0.0=&gt;Dict(&quot;w1&quot;=&gt;[0.149272 -0.196412 0.0; -…
+  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[238.906 602.853 -537.484; -813.389 798.585…
+  &quot;total_time&quot;        =&gt; 58.1338
+  &quot;ode_loss&quot;          =&gt; 0.931382
+  &quot;layerspec&quot;         =&gt; ((5, &quot;softplus&quot;, true), (1, &quot;identity&quot;, true))
+  &quot;gnorm_regularized&quot; =&gt; 0.00159372</code></pre><p>We see that optimization has found a point with a very small gradient:</p><pre><code class="language-julia hljs">gradient(net, params(result[&quot;x&quot;]))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ComponentVector{Float64}(w1 = [6.098171657086067e-10 1.2037124469940301e-9 1.3162634836485166e-9; -4.002974025580966e-11 -9.415494973914034e-10 2.021144450772036e-10; … ; -0.00011347421017524889 9.575466650265724e-5 -0.00022700014688541614; 5.268769427618903e-5 -5.308847553319297e-5 0.00010530242662747468], w2 = [0.001593716099978917 0.0006384120850050939 … 5.731425378276915e-8 1.975792721021108e-6])</code></pre><p>Let us inspect the spectrum of the hessian:</p><pre><code class="language-julia hljs">hessian_spectrum(net, params(result[&quot;x&quot;]))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">LinearAlgebra.Eigen{Float64, Float64, Matrix{Float64}, Vector{Float64}}
+values:
+21-element Vector{Float64}:
+     -3.12910506778895e-11
+      3.6443490257050606e-13
+      1.867666328170921e-11
+      6.471155184308874e-10
+      1.943215445447629e-8
+      5.3367371321097915e-8
+      1.2689116877631157e-7
+      1.388035979543324e-6
+      0.00041796298133717035
+      0.0026344936845060195
+      ⋮
+      0.49897531062825135
+      7.986751873730518
+     29.42732577572924
+     59.36959949457466
+ 108321.15150349533
+ 162664.9106680508
+ 241275.7474027053
+      1.54132354120861e6
+      4.731673510714444e6
+vectors:
+21×21 Matrix{Float64}:
+ -0.0332824   -0.0372588    -0.274746    …   1.80754e-8   4.6623e-9
+ -0.0167006    0.463801     -0.0595088      -1.82447e-7  -1.29443e-7
+ -8.44065e-6   4.85222e-11   1.82092e-6      0.0543648    0.363832
+  8.04748e-6   3.22389e-7   -2.83431e-6     -0.0970677   -0.684586
+  1.64771e-6   2.0539e-7     2.30808e-6      0.0426831    0.321076
+ -0.0837645   -0.0932735    -0.696073    …  -4.75863e-8  -8.20179e-9
+  0.0164174   -0.454651      0.0555568       1.4362e-7    4.65015e-8
+  5.92453e-6   1.66306e-7   -6.79787e-7     -0.401259     0.0511321
+ -4.80884e-6  -4.78778e-8    2.30447e-6      0.756824    -0.0987757
+ -7.29986e-7   2.2466e-8    -8.70312e-7     -0.35589      0.0477133
+  ⋮                                      ⋱                ⋮
+ -5.99346e-7   2.77659e-7   -4.96961e-7      0.0362036   -0.217936
+  7.39106e-7   2.97307e-7   -8.16351e-7     -0.0737887    0.409929
+  2.99122e-7   2.80794e-7   -6.22813e-7      0.0376402   -0.192161
+  2.56586e-8   2.86662e-8    2.12674e-7  …  -0.0532093   -0.00734815
+  6.71626e-9  -1.88963e-7    2.3132e-8      -0.338154    -0.169445
+ -0.71394     -0.0143455     0.149261        2.0853e-5   -0.000452507
+  0.688994     0.0144       -0.0116935       3.02877e-5  -0.000443189
+  0.0249469   -5.43948e-5   -0.137565        4.05375e-5  -0.000431983
+  0.0          0.0           0.0         …   6.67897e-5  -0.000322356</code></pre><p>The eigenvalues are all positive, indicating that we are in a local minimum.</p><pre><code class="language-julia hljs">using CairoMakie
+
+function plot_losscurve(result; kwargs...)
+    f = Figure()
+    ax = Axis(f[1, 1], yscale = log10, xscale = log10, ylabel = &quot;loss&quot;, xlabel = &quot;time&quot;, kwargs...)
+    scatter!(ax, collect(keys(result[&quot;trajectory&quot;])) .+ 1, result[&quot;loss_curve&quot;])
+    f
+end
+
+plot_losscurve(result)</code></pre><p><img src="../loss_curve1.png" alt/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Overview</a><a class="docs-footer-nextpage" href="../teacherstudent/">Teacher student setup »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Tuesday 11 August 2026 17:32">Tuesday 11 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
