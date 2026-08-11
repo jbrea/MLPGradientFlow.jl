@@ -5,6 +5,7 @@ using ComponentArrays, LoopVectorization, OrdinaryDiffEq, ArrayInterface, Static
       OrderedCollections, SLEEFPirates, Random, SpecialFunctions, Pickle, StrideArraysCore, Optimisers
 using FastGaussQuadrature
 using NLopt, Sundials
+using NLSolversBase # `only_fgh!` lives here; Optim v1 re-exported it, Optim v2 does not
 
 export Net, NetI, TeacherNet, FullBatch, MiniBatch
 export loss, gradient, hessian, hessian_spectrum, train, random_params, params, params2dict, gauss_hermite_net
@@ -1553,7 +1554,7 @@ function train(net, p;
                 string(res)
             end
         else # Optim
-            res = Optim.optimize(Optim.only_fgh!(fgh!), x,
+            res = Optim.optimize(NLSolversBase.only_fgh!(fgh!), x,
                                  optim_solver,
                                  optim_options)
 #             x = res.minimizer
