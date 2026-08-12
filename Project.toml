@@ -1,6 +1,6 @@
 name = "MLPGradientFlow"
 uuid = "5710a1e5-60a8-4c70-afc1-f14619eff7f5"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Johanni Brea <jbrea@users.noreply.github.com>"]
 
 [deps]

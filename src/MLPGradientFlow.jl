@@ -104,6 +104,11 @@ deriv(::typeof(g)) = g′
 second_deriv(::typeof(g)) = g′′
 g′(x)  = 4*sigmoid′(4x) + sigmoid(x)
 g′′(x) = 16*sigmoid′′(4x) + sigmoid′(x)
+# `g` has its own fused A_mul_B! kernels below, so these two- and three-argument
+# forms were never needed. The generic kernel, which per-neuron activation groups
+# use, passes the already-computed value: it calls f′(x, y) and f′′(x, y, y′).
+g′(x, y) = g′(x)
+g′′(x, y, y′) = g′′(x)
 
 const invsqrt2 = 1/sqrt(2)
 const invsqrtπ = 1/sqrt(π)
@@ -426,7 +431,8 @@ function Net(; layers, input = nothing, target = nothing,
                      derivs,
                      nin = dims[i],
                      nup = i == length(layerspec) ? 0 : sum(first.(layerspec[i+1:end])),
-                     f, w = Val(Symbol(:w, i)),
+                     f = _normalize_activations(f, k, i, length(layerspec)),
+                     w = Val(Symbol(:w, i)),
                      bias, i0,
                      nextbias = i == length(layerspec) ? (layerspec[i][2] == softmax) : last(layerspec[i+1]))
                     i0 += l.nparams
@@ -485,6 +491,7 @@ end
 ### gaussian input
 ###
 
+include("neuron_activations.jl")
 include("normal_integrals.jl")
 include("gaussian_input.jl")
 include("owent.jl")
@@ -1684,8 +1691,8 @@ _extract(::Val{:input}, res) = isa(res.net, Net) ? Array(res.net.input) : nothin
 _extract(::Val{:target}, res) = isa(res.net, Net) ? Array(res.net.target) : nothing
 _extract(::Val{:teacher}, res) = hasproperty(res, :teacher) ? res.teacher.p : nothing
 _extract(::Val{:layerspec}, res) = _layerextract(res.net)
-_layerextract(net::Net) = map(x -> (x[1], string(x[2]), x[3]), net.layerspec)
-_layerextract(net::NetI) = map(x -> (x[1], string(x[2]), x[3]), net.student.layerspec)
+_layerextract(net::Net) = map(x -> (x[1], _actname(x[2]), x[3]), net.layerspec)
+_layerextract(net::NetI) = map(x -> (x[1], _actname(x[2]), x[3]), net.student.layerspec)
 _extract(::Val{:trajectory}, res) = isnothing(res.trajectory) ? nothing : OrderedDict(t => params2dict(u) for (t, u) in res.trajectory)
 _extract(::Val{:loss_curve}, res) = isnothing(res.trajectory) ? nothing : [res.lossfunc(u) for (_, u) in res.trajectory]
 _extract(::Val{:optim_stopped_by}, res) = res.optim_stopped_by

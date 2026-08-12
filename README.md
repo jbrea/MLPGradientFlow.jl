@@ -191,3 +191,38 @@ mg.gradient(n2, p2)
 
 # for more examples have a look at the julia code above
 ```
+
+## Versions
+
+### Installing a specific version
+
+```julia
+using Pkg
+Pkg.add(url = "https://github.com/jbrea/MLPGradientFlow.jl.git", rev = "v0.3.0")
+```
+
+Replace `rev` with any tag or commit to pin a particular version, e.g. `rev = "v0.2.1"`
+for the previous release.
+
+### 0.3.0
+
+- Activation functions can now be given **per neuron**, by passing a tuple instead of a
+  single function: `Net(layers = ((3, (relu, relu, tanh), true), (1, identity, true)), ...)`.
+  A tuple of identical functions behaves exactly as the single function did, so existing
+  code is unaffected. Supported in hidden layers of `Net`; `NetI` and `softmax` layers
+  still require a single activation function.
+- **Fixed a bug that produced silently wrong loss values.** In 0.2.x, `loss` (and
+  therefore `train`) returned incorrect values whenever the number of samples `N`
+  satisfied `N % 8 ∈ (3, 5, 6, 7)`, with a relative error of roughly 0.5–11% and no
+  warning of any kind. Gradients and Hessians were **not** affected, so the error was
+  invisible to gradient-norm checks. Because `train` selects its best parameters by
+  this loss, runs on an affected sample count could return the wrong parameters.
+
+  If you have results from 0.2.x, check whether your sample count is affected:
+
+  ```julia
+  size(input, 2) % 8 in (3, 5, 6, 7)   # true => losses from 0.2.x are unreliable
+  ```
+
+  Observed on aarch64 (Apple Silicon). Whether other architectures are affected has
+  not yet been established.

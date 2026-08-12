@@ -651,6 +651,9 @@ function NetI(teacher, student; T = eltype(student.input),
     @assert student.layerspec[2][2] == identity
     @assert teacher.net.layerspec[2][1] == 1
     @assert student.layerspec[2][1] == 1
+    if isa(student.layerspec[1][2], Tuple) || isa(teacher.net.layerspec[1][2], Tuple)
+        error("NetI does not support per-neuron activation functions: the Gaussian integrals in gaussian_input.jl are derived per activation function. Use a single activation function per layer, or train with finite data / `gauss_hermite_net`.")
+    end
     t_spec = teacher.net.layerspec
     s_spec = student.layerspec
     r = t_spec[1][1]

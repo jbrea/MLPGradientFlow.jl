@@ -428,3 +428,190 @@ end
         @test loss(net, p) ≈ manual atol = 1e-12
     end
 end
+
+# Central differences against the package's own loss/gradient. ForwardDiff cannot be
+# used directly here: the @tturbo kernels operate on StrideArrays and do not accept
+# Dual numbers, which is why the testsets above build pure-Julia reference forwards.
+function fd_gradient(net, p; e = 1e-6)
+    g = zeros(length(p))
+    for i in eachindex(g)
+        pp = copy(p); pp[i] += e
+        pm = copy(p); pm[i] -= e
+        g[i] = (loss(net, pp) - loss(net, pm)) / (2e)
+    end
+    g
+end
+function fd_hessian(net, p; e = 1e-6)
+    n = length(p)
+    H = zeros(n, n)
+    for i in 1:n
+        pp = copy(p); pp[i] += e
+        pm = copy(p); pm[i] -= e
+        H[:, i] .= (Array(gradient(net, pp)) .- Array(gradient(net, pm))) ./ (2e)
+    end
+    (H .+ H') ./ 2
+end
+
+@testset "per-neuron activation functions" begin
+    import MLPGradientFlow: NeuronActivations, activation_groups,
+                            _normalize_activations, has_neuron_activations, _actname
+
+    @testset "run-length grouping" begin
+        @test length(activation_groups((relu, relu, relu))) == 1
+        @test length(activation_groups((relu, relu, tanh))) == 2
+        @test length(activation_groups((relu, tanh, relu))) == 3   # order preserved
+        grps = activation_groups((relu, relu, tanh, tanh, tanh))
+        @test (grps[1].f, grps[1].lo, grps[1].hi) == (relu, 1, 2)
+        @test (grps[2].f, grps[2].lo, grps[2].hi) == (tanh, 3, 5)
+        for fs in ((relu,), (relu, tanh), (relu, tanh, relu, relu, gelu))
+            gs = activation_groups(fs)
+            @test gs[1].lo == 1
+            @test gs[end].hi == length(fs)
+            @test all(gs[i].hi + 1 == gs[i+1].lo for i in 1:length(gs)-1)
+        end
+    end
+
+    @testset "spec normalisation" begin
+        @test _normalize_activations((relu, relu, relu), 3, 1, 2) === relu
+        @test _normalize_activations(relu, 3, 1, 2) === relu
+        @test _normalize_activations((relu, tanh, relu), 3, 1, 2) isa NeuronActivations
+        @test_throws ErrorException _normalize_activations((relu, tanh), 3, 1, 2)
+        @test_throws ErrorException _normalize_activations((relu, tanh), 2, 2, 2)
+        @test_throws ErrorException _normalize_activations((relu, softmax), 2, 1, 2)
+    end
+
+    @testset "backwards compatibility: uniform tuple == scalar" begin
+        inp = randn(3, 80); targ = randn(1, 80)
+        for f in (softplus, tanh, relu, gelu, sigmoid, g, square, identity)
+            ref = Net(layers = ((4, f, true), (1, identity, true)),
+                      input = inp, target = targ, verbosity = 0)
+            tup = Net(layers = ((4, (f, f, f, f), true), (1, identity, true)),
+                      input = inp, target = targ, verbosity = 0)
+            @test !has_neuron_activations(tup)   # collapsed to the scalar fast path
+            p = random_params(ref); p .= randn(length(p)) .* 0.5
+            @test loss(ref, p) == loss(tup, p)                      # bitwise
+            @test Array(gradient(ref, p)) == Array(gradient(tup, p))
+            @test Array(hessian(ref, p)) == Array(hessian(tup, p))
+        end
+    end
+
+    @testset "mixed layer equals manual composition" begin
+        inp = randn(2, 60)
+        mixed = Net(layers = ((4, (relu, relu, tanh, tanh), false), (1, identity, false)),
+                    input = inp, target = zeros(1, 60), verbosity = 0)
+        p = random_params(mixed); p .= randn(length(p)) .* 0.7
+        w1 = p.w1; w2 = p.w2
+        ref = (w2[1:2]' * relu.(w1[1:2, :] * inp)) .+ (w2[3:4]' * tanh.(w1[3:4, :] * inp))
+        @test Array(mixed(p)) ≈ ref
+    end
+
+    @testset "mixed activations vs finite differences" begin
+        # every constant-derivative special case at once: identity (a′≡1, a′′≡0),
+        # relu (a′′≡0), square (a′′≡1), plus fully computed ones. A wrong row range
+        # gives a silently wrong hessian and a perfectly healthy loss curve.
+        mixes = ((identity, relu, square, softplus, tanh),
+                 (square, square, identity, identity, relu),
+                 (tanh, identity, gelu, relu, g),
+                 (relu, square, relu, square, relu))
+        for fs in mixes, bias in (true, false)
+            inp = randn(3, 64)
+            net = Net(layers = ((5, fs, bias), (1, identity, true)),
+                      input = inp, target = randn(1, 64), verbosity = 0)
+            @test has_neuron_activations(net)
+            p = random_params(net); p .= randn(length(p)) .* 0.4
+            @test Array(gradient(net, p)) ≈ fd_gradient(net, p) atol = 1e-6 rtol = 1e-5
+            H = Array(hessian(net, p))
+            @test H ≈ fd_hessian(net, p) atol = 1e-4 rtol = 1e-4
+            @test H ≈ H'
+            @test !any(isnan, H)
+        end
+    end
+
+    @testset "mixed activations in a 2-hidden-layer net" begin
+        inp = randn(3, 64)
+        net = Net(layers = ((4, (tanh, tanh, relu, identity), true),
+                            (3, (softplus, square, gelu), true),
+                            (2, identity, false)),
+                  input = inp, target = randn(2, 64), verbosity = 0)
+        p = random_params(net); p .= randn(length(p)) .* 0.4
+        @test Array(gradient(net, p)) ≈ fd_gradient(net, p) atol = 1e-6 rtol = 1e-5
+        @test Array(hessian(net, p)) ≈ fd_hessian(net, p) atol = 1e-4 rtol = 1e-4
+    end
+
+    @testset "constant buffer rows stay valid across calls" begin
+        inp = randn(2, 64)
+        net = Net(layers = ((4, (identity, relu, square, tanh), true), (1, identity, true)),
+                  input = inp, target = randn(1, 64), verbosity = 0)
+        p = random_params(net); p .= randn(length(p)) .* 0.5
+        H1 = copy(Array(hessian(net, p)))
+        q = copy(p)
+        for _ in 1:25
+            q .= randn(length(p))
+            hessian(net, q)
+        end
+        @test Array(hessian(net, p)) == H1
+    end
+
+    @testset "train" begin
+        inp = randn(2, 64)
+        target = randn(1, 64)
+        # ReLU mix: training must run and report a consistent loss. NOT finite
+        # differences: gradient flow drives unneeded ReLU units toward zero weights,
+        # so the converged point sits on a kink where relu′(0) = false disagrees with
+        # a central difference averaging the two linear pieces. That is a property of
+        # ReLU, not a bug. Derivatives are checked at generic points above.
+        net = Net(layers = ((3, (relu, tanh, relu), true), (1, identity, true)),
+                  input = inp, target = target, verbosity = 0)
+        p = random_params(net)
+        L0 = loss(net, p)
+        res = train(net, p; maxtime_ode = 5, maxtime_optim = 5,
+                    verbosity = 0, show_progress = false)
+        x = params(res["x"])
+        @test isfinite(res["loss"])
+        @test res["loss"] ≤ L0
+        # the reported loss must match an independent computation at the returned point
+        @test res["loss"] ≈ sum((Array(net(x)) .- target) .^ 2) / size(inp, 2)
+
+        # smooth mix: here the converged point IS differentiable, so the returned
+        # point must really be a critical point of the real objective
+        smooth = Net(layers = ((3, (softplus, tanh, gelu), true), (1, identity, true)),
+                     input = inp, target = target, verbosity = 0)
+        ps = random_params(smooth)
+        rs = train(smooth, ps; maxtime_ode = 5, maxtime_optim = 5,
+                   verbosity = 0, show_progress = false)
+        xs = params(rs["x"])
+        @test Array(gradient(smooth, xs)) ≈ fd_gradient(smooth, xs) atol = 1e-6 rtol = 1e-5
+
+        # a uniform tuple collapses to the scalar representation, so the whole
+        # training pipeline must be bit-for-bit identical, not merely close
+        ref = Net(layers = ((3, tanh, true), (1, identity, true)),
+                  input = inp, target = target, verbosity = 0)
+        tup = Net(layers = ((3, (tanh, tanh, tanh), true), (1, identity, true)),
+                  input = inp, target = target, verbosity = 0)
+        q = random_params(ref)
+        kw = (; maxiterations_ode = 50, maxiterations_optim = 0,
+                verbosity = 0, show_progress = false)
+        r1 = train(ref, q; kw...)
+        r2 = train(tup, q; kw...)
+        @test r1["loss"] == r2["loss"]
+        @test params(r1["x"]) == params(r2["x"])
+    end
+
+    @testset "serialisation" begin
+        @test _actname(relu) == "relu"
+        @test _actname((relu, tanh)) == ["relu", "tanh"]
+        net = Net(layers = ((3, (relu, tanh, relu), true), (1, identity, true)),
+                  input = randn(2, 64), target = randn(1, 64), verbosity = 0)
+        res = train(net, random_params(net); maxiterations_ode = 5,
+                    maxiterations_optim = 0, verbosity = 0, show_progress = false)
+        @test res["layerspec"][1][2] == ["relu", "tanh", "relu"]
+    end
+
+    @testset "NetI rejects per-neuron activations" begin
+        input = randn(1, 512)
+        teacher = TeacherNet(; layers = ((2, softplus, true), (1, identity, true)), input)
+        student = Net(; layers = ((2, (tanh, relu), true), (1, identity, true)),
+                      input, target = teacher(input), verbosity = 0)
+        @test_throws ErrorException NetI(teacher, student)
+    end
+end
