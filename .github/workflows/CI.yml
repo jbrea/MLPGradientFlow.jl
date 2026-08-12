@@ -13,6 +13,10 @@ jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
+    # nightly is unreleased Julia and breaks for reasons unrelated to this package
+    # (LoopVectorization 0.12 in particular). Keep running it for information, but
+    # do not let it turn the workflow red.
+    continue-on-error: ${{ matrix.version == 'nightly' }}
     strategy:
       fail-fast: false
       matrix:
