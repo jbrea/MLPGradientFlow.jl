@@ -21,8 +21,24 @@ jobs:
           - '1.10'
           - '1' # Leave this line unchanged. '1' will automatically expand to the latest stable 1.x release of Julia.
           - 'nightly'
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
         arch: [x64]
+        include:
+          # Apple Silicon must be covered natively: LoopVectorization generates
+          # different code on aarch64, and produced silently wrong reductions
+          # here (see the loss fix in v0.3.0) that x86-only CI never caught.
+          # `macos-latest` runners are aarch64; pairing them with arch: x64
+          # only tests x86 Julia under Rosetta.
+          - os: macos-latest
+            arch: aarch64
+            version: '1'
+          - os: macos-latest
+            arch: aarch64
+            version: '1.10'
+          # keep one native x86 macOS runner
+          - os: macos-13
+            arch: x64
+            version: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2

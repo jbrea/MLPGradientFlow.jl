@@ -40,6 +40,11 @@ NLopt = "0.6,1"
 Optim = "1.7, 2"
 Optimisers = "0.4"
 OrderedCollections = "1"
+# Do NOT widen to 7 without also changing src/MLPGradientFlow.jl. In v7 the
+# OrdinaryDiffEq meta-package no longer re-exports the solvers this package uses:
+# RK4 moved to OrdinaryDiffEqLowOrderRK, KenCarp58 and TRBDF2 to
+# OrdinaryDiffEqSDIRK. Merging a CompatHelper bump to 7 makes the package fail to
+# precompile (UndefVarError: RK4). This already happened once, in PR #19.
 OrdinaryDiffEq = "6.18"
 Pickle = "0.3"
 SLEEFPirates = "0.6"
