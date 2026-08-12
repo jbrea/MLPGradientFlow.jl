@@ -24,59 +24,59 @@ res_gradientflow = train(net, p, maxT = 30,
   &quot;ode_iterations&quot;    =&gt; 135
   &quot;optim_time_run&quot;    =&gt; 0
   &quot;converged&quot;         =&gt; false
-  &quot;ode_time_run&quot;      =&gt; 2.95399
+  &quot;ode_time_run&quot;      =&gt; 2.98555
   &quot;loss&quot;              =&gt; 1.15865e-6
   &quot;input&quot;             =&gt; [0.0619327 -0.595824 … 0.388148 -0.713525; 0.278406 0.…
   &quot;trajectory&quot;        =&gt; OrderedDict(0.0=&gt;Dict(&quot;w1&quot;=&gt;[-1.10008 0.418848; -0.278…
   &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[-0.552286 0.648202; 0.833958 0.0197933; -0…
-  &quot;total_time&quot;        =&gt; 15.9249
+  &quot;total_time&quot;        =&gt; 15.6328
   &quot;ode_loss&quot;          =&gt; 1.15865e-6
   &quot;layerspec&quot;         =&gt; ((4, &quot;softplus&quot;, false), (1, &quot;identity&quot;, false))
   &quot;gnorm_regularized&quot; =&gt; 1.19526e-6</code></pre><p>Let us compare to training without and with minibatches and gradient descent.</p><pre><code class="language-julia hljs">res_descent_fullbatch = train(net, p, alg = Descent(eta = 1e-1),
                               maxiterations_ode = 10^8,
                               maxtime_ode = 30, maxiterations_optim = 0,
                               n_samples_trajectory = 10^3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{String, Any} with 19 entries:
-  &quot;gnorm&quot;             =&gt; 2.40558e-5
+  &quot;gnorm&quot;             =&gt; 2.48078e-5
   &quot;init&quot;              =&gt; Dict(&quot;w1&quot;=&gt;[-1.10008 0.418848; -0.278256 0.234034; -1.…
-  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[-0.834053 0.591923; 1.11566 0.175331; -0.6…
-  &quot;loss_curve&quot;        =&gt; [1.70629, 0.0341643, 0.0302846, 0.0267825, 0.0224678, …
+  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[-0.836651 0.59404; 1.11253 0.176901; -0.62…
+  &quot;loss_curve&quot;        =&gt; [1.70629, 0.0342952, 0.0304746, 0.0270933, 0.0229943, …
   &quot;target&quot;            =&gt; [-0.533436 -0.33788 … 0.00158328 -0.354491]
   &quot;optim_iterations&quot;  =&gt; 0
   &quot;ode_stopped_by&quot;    =&gt; &quot;maxtime_ode&quot;
-  &quot;ode_iterations&quot;    =&gt; 72566
+  &quot;ode_iterations&quot;    =&gt; 70440
   &quot;optim_time_run&quot;    =&gt; 0
   &quot;converged&quot;         =&gt; false
-  &quot;ode_time_run&quot;      =&gt; 30.0
-  &quot;loss&quot;              =&gt; 1.45016e-5
+  &quot;ode_time_run&quot;      =&gt; 30.0004
+  &quot;loss&quot;              =&gt; 1.49036e-5
   &quot;input&quot;             =&gt; [0.0619327 -0.595824 … 0.388148 -0.713525; 0.278406 0.…
   &quot;trajectory&quot;        =&gt; OrderedDict(0=&gt;Dict(&quot;w1&quot;=&gt;[-1.10008 0.418848; -0.27825…
-  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[-0.834052 0.591922; 1.11566 0.17533; -0.62…
-  &quot;total_time&quot;        =&gt; 30.0669
-  &quot;ode_loss&quot;          =&gt; 1.45015e-5
+  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[-0.83665 0.594039; 1.11253 0.1769; -0.6215…
+  &quot;total_time&quot;        =&gt; 30.0689
+  &quot;ode_loss&quot;          =&gt; 1.49034e-5
   &quot;layerspec&quot;         =&gt; ((4, &quot;softplus&quot;, false), (1, &quot;identity&quot;, false))
-  &quot;gnorm_regularized&quot; =&gt; 2.40558e-5</code></pre><pre><code class="language-julia hljs">res_descent = train(net, p, alg = Descent(eta = 1e-1), batchsize = 100,
+  &quot;gnorm_regularized&quot; =&gt; 2.48078e-5</code></pre><pre><code class="language-julia hljs">res_descent = train(net, p, alg = Descent(eta = 1e-1), batchsize = 100,
                     maxiterations_ode = 10^8,
                     maxtime_ode = 20, maxiterations_optim = 0,
                     n_samples_trajectory = 10^3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{String, Any} with 19 entries:
-  &quot;gnorm&quot;             =&gt; 5.29942e-5
+  &quot;gnorm&quot;             =&gt; 5.16695e-5
   &quot;init&quot;              =&gt; Dict(&quot;w1&quot;=&gt;[-1.10008 0.418848; -0.278256 0.234034; -1.…
-  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[-0.655211 0.595941; 0.887189 0.0706848; -0…
-  &quot;loss_curve&quot;        =&gt; [1.70629, 0.000498966, 0.000359868, 0.000276239, 0.000…
+  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[-0.663417 0.590554; 0.898059 0.0756634; -0…
+  &quot;loss_curve&quot;        =&gt; [1.70629, 0.000512235, 0.000381416, 0.000295733, 0.000…
   &quot;target&quot;            =&gt; [-0.533436 -0.33788 … 0.00158328 -0.354491]
   &quot;optim_iterations&quot;  =&gt; 0
   &quot;ode_stopped_by&quot;    =&gt; &quot;maxtime_ode&quot;
-  &quot;ode_iterations&quot;    =&gt; 1533000
+  &quot;ode_iterations&quot;    =&gt; 1423600
   &quot;optim_time_run&quot;    =&gt; 0
   &quot;converged&quot;         =&gt; false
-  &quot;ode_time_run&quot;      =&gt; 20.0
-  &quot;loss&quot;              =&gt; 1.95976e-6
+  &quot;ode_time_run&quot;      =&gt; 20.0003
+  &quot;loss&quot;              =&gt; 2.07917e-6
   &quot;input&quot;             =&gt; [0.0619327 -0.595824 … 0.388148 -0.713525; 0.278406 0.…
   &quot;trajectory&quot;        =&gt; OrderedDict(0=&gt;Dict(&quot;w1&quot;=&gt;[-1.10008 0.418848; -0.27825…
-  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[-0.655205 0.595965; 0.8872 0.0706999; -0.5…
-  &quot;total_time&quot;        =&gt; 20.0017
-  &quot;ode_loss&quot;          =&gt; 1.96358e-6
+  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[-0.663411 0.590579; 0.898071 0.0756789; -0…
+  &quot;total_time&quot;        =&gt; 20.002
+  &quot;ode_loss&quot;          =&gt; 2.08426e-6
   &quot;layerspec&quot;         =&gt; ((4, &quot;softplus&quot;, false), (1, &quot;identity&quot;, false))
-  &quot;gnorm_regularized&quot; =&gt; 5.29942e-5</code></pre><p>Not surprisingly, gradient descent takes more time than gradient flow (which uses second order information), and therefore does not find a point of equally low loss and gradient as gradient flow.</p><pre><code class="language-julia hljs">tdb, ttb, _ = MLPGradientFlow.trajectory_distance(res_descent_fullbatch, res_gradientflow)
+  &quot;gnorm_regularized&quot; =&gt; 5.16695e-5</code></pre><p>Not surprisingly, gradient descent takes more time than gradient flow (which uses second order information), and therefore does not find a point of equally low loss and gradient as gradient flow.</p><pre><code class="language-julia hljs">tdb, ttb, _ = MLPGradientFlow.trajectory_distance(res_descent_fullbatch, res_gradientflow)
 td, tt, _ = MLPGradientFlow.trajectory_distance(res_descent, res_gradientflow)
 
 using CairoMakie
@@ -89,44 +89,44 @@ axislegend(ax)
 f</code></pre><p><img src="../trajectory_distance1.png" alt/></p><p>Gradient descent stays close to gradient flow, both in full batch mode and with minibatches of size 100.</p><pre><code class="language-julia hljs">res_adam_fullbatch = train(net, p, alg = Adam(),
                            maxtime_ode = 20, maxiterations_optim = 0,
                            n_samples_trajectory = 10^3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{String, Any} with 19 entries:
-  &quot;gnorm&quot;             =&gt; 5.27328e-6
+  &quot;gnorm&quot;             =&gt; 5.06259e-6
   &quot;init&quot;              =&gt; Dict(&quot;w1&quot;=&gt;[-1.10008 0.418848; -0.278256 0.234034; -1.…
-  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[0.225192 -0.26556; -0.540999 0.510241; -0.…
-  &quot;loss_curve&quot;        =&gt; [1.70629, 1.31569, 1.01847, 0.801422, 0.642229, 0.5238…
+  &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[0.230688 -0.264386; -0.539835 0.509843; -0…
+  &quot;loss_curve&quot;        =&gt; [1.70629, 1.30075, 1.00215, 0.781662, 0.624784, 0.5084…
   &quot;target&quot;            =&gt; [-0.533436 -0.33788 … 0.00158328 -0.354491]
   &quot;optim_iterations&quot;  =&gt; 0
   &quot;ode_stopped_by&quot;    =&gt; &quot;maxtime_ode&quot;
-  &quot;ode_iterations&quot;    =&gt; 45853
+  &quot;ode_iterations&quot;    =&gt; 47297
   &quot;optim_time_run&quot;    =&gt; 0
   &quot;converged&quot;         =&gt; false
-  &quot;ode_time_run&quot;      =&gt; 20.0002
-  &quot;loss&quot;              =&gt; 8.58108e-7
+  &quot;ode_time_run&quot;      =&gt; 20.0
+  &quot;loss&quot;              =&gt; 8.49e-7
   &quot;input&quot;             =&gt; [0.0619327 -0.595824 … 0.388148 -0.713525; 0.278406 0.…
   &quot;trajectory&quot;        =&gt; OrderedDict(0=&gt;Dict(&quot;w1&quot;=&gt;[-1.10008 0.418848; -0.27825…
-  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[0.225196 -0.26556; -0.540997 0.510241; -0.…
-  &quot;total_time&quot;        =&gt; 20.1457
-  &quot;ode_loss&quot;          =&gt; 8.58101e-7
+  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[0.230691 -0.264385; -0.539834 0.509842; -0…
+  &quot;total_time&quot;        =&gt; 20.1504
+  &quot;ode_loss&quot;          =&gt; 8.4899e-7
   &quot;layerspec&quot;         =&gt; ((4, &quot;softplus&quot;, false), (1, &quot;identity&quot;, false))
-  &quot;gnorm_regularized&quot; =&gt; 5.27328e-6</code></pre><pre><code class="language-julia hljs">res_adam = train(net, p, alg = Adam(), batchsize = 100, maxiterations_ode = 10^8,
+  &quot;gnorm_regularized&quot; =&gt; 5.06259e-6</code></pre><pre><code class="language-julia hljs">res_adam = train(net, p, alg = Adam(), batchsize = 100, maxiterations_ode = 10^8,
                  maxtime_ode = 20, maxiterations_optim = 0,
                  n_samples_trajectory = 10^3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dict{String, Any} with 19 entries:
   &quot;gnorm&quot;             =&gt; 0.000676705
   &quot;init&quot;              =&gt; Dict(&quot;w1&quot;=&gt;[-1.10008 0.418848; -0.278256 0.234034; -1.…
   &quot;x&quot;                 =&gt; Dict(&quot;w1&quot;=&gt;[0.198439 -0.261251; -0.519234 0.502803; -0…
-  &quot;loss_curve&quot;        =&gt; [1.70629, 0.0260945, 0.00035603, 0.00023668, 0.0001874…
+  &quot;loss_curve&quot;        =&gt; [1.70629, 0.0321723, 0.000682452, 0.000247283, 0.00021…
   &quot;target&quot;            =&gt; [-0.533436 -0.33788 … 0.00158328 -0.354491]
   &quot;optim_iterations&quot;  =&gt; 0
   &quot;ode_stopped_by&quot;    =&gt; &quot;maxtime_ode&quot;
-  &quot;ode_iterations&quot;    =&gt; 1822834
+  &quot;ode_iterations&quot;    =&gt; 1610513
   &quot;optim_time_run&quot;    =&gt; 0
   &quot;converged&quot;         =&gt; false
   &quot;ode_time_run&quot;      =&gt; 20.0
   &quot;loss&quot;              =&gt; 1.08468e-6
   &quot;input&quot;             =&gt; [0.0619327 -0.595824 … 0.388148 -0.713525; 0.278406 0.…
   &quot;trajectory&quot;        =&gt; OrderedDict(0=&gt;Dict(&quot;w1&quot;=&gt;[-1.10008 0.418848; -0.27825…
-  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[0.393824 -0.243852; -0.525274 0.505574; -0…
-  &quot;total_time&quot;        =&gt; 20.0016
-  &quot;ode_loss&quot;          =&gt; 9.89722e-7
+  &quot;ode_x&quot;             =&gt; Dict(&quot;w1&quot;=&gt;[0.388893 -0.24362; -0.525295 0.505196; -0.…
+  &quot;total_time&quot;        =&gt; 20.0017
+  &quot;ode_loss&quot;          =&gt; 1.01828e-6
   &quot;layerspec&quot;         =&gt; ((4, &quot;softplus&quot;, false), (1, &quot;identity&quot;, false))
   &quot;gnorm_regularized&quot; =&gt; 0.000676705</code></pre><pre><code class="language-julia hljs">tdb, ttb, _ = MLPGradientFlow.trajectory_distance(res_adam_fullbatch, res_gradientflow)
 td, tt, _ = MLPGradientFlow.trajectory_distance(res_adam, res_gradientflow)
@@ -138,4 +138,4 @@ ax = Axis(f[1, 1], ylabel = &quot;distance&quot;, yscale = Makie.pseudolog10, xl
 lines!(ax, 1:length(tdb), tdb, label = &quot;full batch&quot;)
 lines!(ax, 1:length(td), td, label = &quot;batchsize = 100&quot;)
 axislegend(ax, position = :rb)
-f</code></pre><p><img src="../trajectory_distance2.png" alt/></p><p>This is not the case for <code>Adam</code> which uses effectively different timescales for the different parameters.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../teacherstudent/">« Teacher student setup</a><a class="docs-footer-nextpage" href="../normal/">Standard Normal Input »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Wednesday 12 August 2026 09:25">Wednesday 12 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+f</code></pre><p><img src="../trajectory_distance2.png" alt/></p><p>This is not the case for <code>Adam</code> which uses effectively different timescales for the different parameters.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../teacherstudent/">« Teacher student setup</a><a class="docs-footer-nextpage" href="../normal/">Standard Normal Input »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Wednesday 12 August 2026 09:46">Wednesday 12 August 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
