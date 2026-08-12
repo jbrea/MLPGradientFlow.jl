@@ -12,3 +12,4 @@ docs/build
 # pixi environments
 .pixi
 *.egg-info
+Manifest.toml

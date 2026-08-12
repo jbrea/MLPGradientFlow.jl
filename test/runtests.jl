@@ -410,3 +410,21 @@ end
     @test res["loss"] ≈ res_distr[i][1]["loss"] atol = 1e-5
 end
 
+
+@testset "loss reduction is correct for every sample count" begin
+    # Regression test. `ℓ` used to accumulate into a scalar under @tturbo, which on
+    # statically-sized StrideArrays returns silently wrong values (~1-10% relative
+    # error) whenever the trailing extent has remainder 3, 5, 6 or 7 mod 8.
+    # The forward pass and the gradients were unaffected, so only a direct
+    # comparison against a plain-Julia sum catches it.
+    for N in 60:80
+        Random.seed!(4242)
+        inp = randn(3, N)
+        target = randn(1, N)
+        net = Net(layers = ((5, tanh, true), (1, identity, true)),
+                  input = inp, target = target, verbosity = 0)
+        p = random_params(net)
+        manual = sum((Array(net(p)) .- target) .^ 2) / N
+        @test loss(net, p) ≈ manual atol = 1e-12
+    end
+end

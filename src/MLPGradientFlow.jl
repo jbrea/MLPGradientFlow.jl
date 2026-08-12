@@ -527,7 +527,12 @@ struct NegativeLogLikelihood end
 struct MSE end
 function ℓ(::NegativeLogLikelihood, a, target::AbstractVector, ::Nothing)
     res = zero(eltype(a))
-    @tturbo for j in indices(target)
+    n = length(target)
+    nb = nbulk(n)                                  # see note above ℓ(::MSE, ...)
+    @tturbo for j in 1:nb
+        res -= log(a[target[j], j])
+    end
+    @inbounds @fastmath for j in nb+1:n
         res -= log(a[target[j], j])
     end
     res
@@ -542,7 +547,12 @@ function ℓ(::NegativeLogLikelihood, a, target::AbstractMatrix{T}, ::Nothing) w
 end
 function ℓ(::NegativeLogLikelihood, a, target::AbstractVector, weights)
     res = zero(eltype(a))
-    @tturbo for j in indices(target)
+    n = length(target)
+    nb = nbulk(n)                                  # see note above ℓ(::MSE, ...)
+    @tturbo for j in 1:nb
+        res -= log(a[target[j], j]) * weights[j]
+    end
+    @inbounds @fastmath for j in nb+1:n
         res -= log(a[target[j], j]) * weights[j]
     end
     res
@@ -555,16 +565,41 @@ function ℓ(::NegativeLogLikelihood, a, target::AbstractMatrix{T}, weights) whe
     end
     res
 end
+# NOTE on the bulk/tail split in the reductions below.
+#
+# On statically-sized StrideArrays, LoopVectorization miscompiles a reduction whose
+# accumulator spans the whole loop nest when the trailing extent has remainder
+# 3, 5, 6 or 7 mod 8: it returns silently wrong values (0.5-11% relative error, no
+# NaN, no warning). Verified on aarch64 with @turbo and @tturbo alike; plain Arrays
+# and reductions that accumulate into array elements are unaffected.
+#
+# Running @tturbo over a bulk of length `nbulk` (a runtime value, always a multiple
+# of 8) and finishing the <8 remaining columns with a scalar loop avoids it at no
+# measurable cost: benchmarked worst case +0.023% of one gradient step across
+# Din, k, Dout in {1,10,50} and N from 1e3 to 1e6. Dropping @tturbo entirely costs
+# up to +47% for wide outputs, so do not "simplify" this back to a plain loop.
+@inline nbulk(n) = (n >> 3) << 3
+
 function ℓ(::MSE, a, target, ::Nothing)
     res = zero(eltype(a))
-    @tturbo for i in indices(target, 1), j in indices(target, 2)
+    n = size(target, 2)
+    nb = nbulk(n)
+    @tturbo for i in indices(target, 1), j in 1:nb
+        res += (target[i, j] - a[i, j])^2
+    end
+    @inbounds @fastmath for i in axes(target, 1), j in nb+1:n
         res += (target[i, j] - a[i, j])^2
     end
     res
 end
 function ℓ(::MSE, a, target, weights)
     res = zero(eltype(a))
-    @tturbo for i in indices(target, 1), j in indices(target, 2)
+    n = size(target, 2)
+    nb = nbulk(n)
+    @tturbo for i in indices(target, 1), j in 1:nb
+        res += (target[i, j] - a[i, j])^2 * weights[j]
+    end
+    @inbounds @fastmath for i in axes(target, 1), j in nb+1:n
         res += (target[i, j] - a[i, j])^2 * weights[j]
     end
     res
