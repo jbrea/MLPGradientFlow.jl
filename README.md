@@ -192,6 +192,19 @@ mg.gradient(n2, p2)
 # for more examples have a look at the julia code above
 ```
 
+## Supported platforms
+
+Tested in CI on Linux x86_64, Windows x86_64, macOS aarch64 (Apple Silicon) and
+macOS x86_64 (Intel).
+
+**x86_64 Julia running under Rosetta on an Apple Silicon Mac is not supported.**
+Rosetta does not implement AVX, and `LoopVectorization` emits instructions the
+translation layer cannot execute, so the package crashes with `Illegal
+instruction` rather than failing gracefully. On Apple Silicon, install the native
+aarch64 build of Julia — this is what `juliaup` and the official installers give
+you by default, so you are only affected if you deliberately installed an x86_64
+Julia.
+
 ## Versions
 
 ### Installing a specific version

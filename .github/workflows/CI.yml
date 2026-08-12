@@ -13,10 +13,11 @@ jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
-    # nightly is unreleased Julia and breaks for reasons unrelated to this package
-    # (LoopVectorization 0.12 in particular). Keep running it for information, but
-    # do not let it turn the workflow red.
-    continue-on-error: ${{ matrix.version == 'nightly' }}
+    # Informational rows that must not turn the workflow red:
+    #   nightly  - unreleased Julia, breaks for reasons unrelated to this package
+    #              (LoopVectorization 0.12 in particular)
+    #   rosetta  - x86 Julia under Rosetta on Apple Silicon, unsupported
+    continue-on-error: ${{ matrix.version == 'nightly' || matrix.rosetta == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -43,6 +44,15 @@ jobs:
           - os: macos-13
             arch: x64
             version: '1'
+          # Informational only, never blocking (see continue-on-error below):
+          # macos-latest is Apple Silicon, so arch: x64 runs x86 Julia under
+          # Rosetta. Rosetta does not implement AVX and LoopVectorization emits
+          # an illegal instruction in `ℓ`. This configuration is unsupported;
+          # the row is kept so we notice if it ever starts working.
+          - os: macos-latest
+            arch: x64
+            version: '1'
+            rosetta: true
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
