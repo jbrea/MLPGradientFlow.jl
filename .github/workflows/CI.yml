@@ -28,7 +28,9 @@ jobs:
           - '1.9' # Replace this with the minimum Julia version that your package supports. E.g. if your package requires Julia 1.5 or higher, change this to '1.5'.
           - '1.10'
           - '1' # Leave this line unchanged. '1' will automatically expand to the latest stable 1.x release of Julia.
-          - 'nightly'
+          # No 'nightly': it fails on unreleased Julia for reasons outside this
+          # package (LoopVectorization 0.12), and continue-on-error did not stop
+          # it turning the run red.
         os: [ubuntu-latest, windows-latest]
         arch: [x64]
         include:
