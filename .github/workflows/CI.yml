@@ -13,6 +13,9 @@ jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
+    # The full suite takes ~10 min locally; 60 stops a genuine hang burning the
+    # 6h default. Note this does not cover queue time, which has its own 24h limit.
+    timeout-minutes: 60
     # Informational rows that must not turn the workflow red:
     #   nightly  - unreleased Julia, breaks for reasons unrelated to this package
     #              (LoopVectorization 0.12 in particular)
@@ -40,10 +43,9 @@ jobs:
           - os: macos-latest
             arch: aarch64
             version: '1.10'
-          # keep one native x86 macOS runner
-          - os: macos-13
-            arch: x64
-            version: '1'
+          # No macos-13 row: GitHub's Intel macOS runner capacity is shrinking and
+          # jobs sit in the queue until the 24h limit cancels them. Native x86_64 is
+          # already covered by ubuntu-latest and windows-latest.
           # Informational only, never blocking (see continue-on-error below):
           # macos-latest is Apple Silicon, so arch: x64 runs x86 Julia under
           # Rosetta. Rosetta does not implement AVX and LoopVectorization emits
